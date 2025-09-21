@@ -11,6 +11,7 @@ from utils.signal import send_signal_group
 from utils.email import send_email_smtp
 from utils.scraper import fetch_calendar_week
 
+__version__ = "1.0.0"
 app = Flask(__name__)
 app.config.from_object(Config)
 db.init_app(app)

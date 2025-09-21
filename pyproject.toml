@@ -1,0 +1,23 @@
+[tool.semantic_release]
+# Where the version lives in your source:
+version_variables = ["app.py:__version__"]
+
+# Your default branch (change to "master" if that's yours)
+branch = "main"
+
+# Generate & commit a changelog
+changelog_file = "CHANGELOG.md"
+
+# We’re not building/uploading a package to PyPI
+upload_to_repository = false
+build_command = ""
+
+# Conventional Commits (Angular style parsing)
+commit_parser = "semantic_release.history.angular"
+
+# Tag format (e.g., v1.2.3)
+tag_format = "v{version}"
+
+# Optional: customize release rules (defaults already map fix->patch, feat->minor, breaking->major)
+# [tool.semantic_release.release_rules]
+# ...
