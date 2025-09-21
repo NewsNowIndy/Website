@@ -1,0 +1,12 @@
+{% extends "base.html" %}{% block title %}Contact — NewsNowIndy{% endblock %}
+{% block content %}<div class="card"><h1>Contact</h1>
+<p class="small">Phone: <a href="tel:+13176201596">317-620-1596</a> • Email: <a href="mailto:info@newsnowindy.com">info@newsnowindy.com</a> • Signal: IndyLeaks.16</p>
+<form method="post">{{ form.csrf_token }}
+<div class="grid grid-2"><div><label>Name</label>{{ form.name(class_="input") }}</div><div><label>Email</label>{{ form.email(class_="input") }}</div></div>
+<label>Subject</label>{{ form.subject(class_="input") }}<label>Message</label>{{ form.message(class_="input") }}
+{% if turnstile_site_key %}
+<script src="https://challenges.cloudflare.com/turnstile/v0/api.js" defer></script>
+<div class="cf-challenge" style="margin-top:.6rem"><div class="cf-turnstile" data-sitekey="{{ turnstile_site_key }}"></div></div>
+{% endif %}
+<div style="margin-top:.6rem"><button class="btn btn-primary">Send</button></div></form>
+<p class="tiny-note">We use a lightweight spam shield. If you have trouble, email us directly.</p></div>{% endblock %}

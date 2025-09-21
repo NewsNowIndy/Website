@@ -1,0 +1,6 @@
+{% extends "base.html" %}{% block title %}Admin — Broadcast Email{% endblock %}
+{% block content %}<div class="card"><h1>Broadcast Email</h1>
+<form method="post"><label>Subject</label><input class="input" name="subject" required>
+<label>HTML Body</label><textarea class="input" name="html" rows="12" required></textarea>
+<div class="tiny-note">Sends to all subscribers (BCC). Uses your SMTP settings.</div>
+<div style="margin-top:.6rem"><button class="btn btn-primary">Send</button></div></form></div>{% endblock %}

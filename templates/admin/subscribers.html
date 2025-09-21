@@ -1,0 +1,5 @@
+{% extends "base.html" %}{% block title %}Admin — Subscribers{% endblock %}
+{% block content %}<div class="card"><h1>Subscribers</h1>
+<table class="table"><thead><tr><th>Email</th><th>Name</th><th>Since</th></tr></thead><tbody>
+{% for s in subs %}<tr><td>{{ s.email }}</td><td class="small">{{ (s.first_name or '') ~ ' ' ~ (s.last_name or '') }}</td><td class="small">{{ s.created_at.strftime('%b %d, %Y %H:%M') }}</td></tr>{% endfor %}
+</tbody></table></div>{% endblock %}

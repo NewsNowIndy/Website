@@ -1,0 +1,5 @@
+{% extends "base.html" %}{% block title %}Admin — Messages{% endblock %}
+{% block content %}<div class="card"><h1>Contact Messages</h1>
+<table class="table"><thead><tr><th>When</th><th>From</th><th>Email</th><th>Subject</th><th>Spam?</th><th>Message</th></tr></thead><tbody>
+{% for m in rows %}<tr><td class="small">{{ m.created_at.strftime('%b %d, %Y %H:%M') }}</td><td class="small">{{ m.name or '' }}</td><td class="small">{{ m.email }}</td><td class="small">{{ m.subject or '' }}</td><td class="small">{{ 'Yes' if m.is_spam else 'No' }}</td><td class="small">{{ m.message }}</td></tr>{% endfor %}
+</tbody></table></div>{% endblock %}

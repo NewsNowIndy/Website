@@ -1,0 +1,7 @@
+{% extends "base.html" %}{% block title %}Subscribe — NewsNowIndy{% endblock %}
+{% block content %}<div class="card"><h1>Subscribe for email alerts</h1>
+<p class="small">Enter your email (required) and name (optional). We'll only send important updates.</p>
+<form method="post">{{ form.csrf_token }}
+<label>Email</label>{{ form.email(class_="input") }}
+<div class="grid grid-2"><div><label>First name</label>{{ form.first_name(class_="input") }}</div><div><label>Last name</label>{{ form.last_name(class_="input") }}</div></div>
+<div style="margin-top:.6rem"><button class="btn btn-primary">Subscribe</button></div></form></div>{% endblock %}

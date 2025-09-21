@@ -1,0 +1,6 @@
+{% extends "base.html" %}{% block title %}{{ post.title }} — NewsNowIndy{% endblock %}
+{% block content %}<article class="card">
+{% if post.hero_image_url %}<img src="{{ post.hero_image_url }}" alt="" style="width:100%;border-radius:12px;border:1px solid var(--border);margin-bottom:1rem">{% endif %}
+<h1>{{ post.title }}</h1><div class="small">{{ post.created_at.strftime('%b %d, %Y') }}</div>
+{% if post.summary %}<p class="small">{{ post.summary }}</p>{% endif %}
+<div>{{ post.content | safe }}</div></article>{% endblock %}

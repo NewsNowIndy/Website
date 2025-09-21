@@ -1,0 +1,10 @@
+# <type>(<scope>): <short summary>
+#   types: feat, fix, docs, style, refactor, perf, test, build, ci, chore, revert
+#   breaking change: add ! => feat!: …  OR add footer: BREAKING CHANGE: …
+#   scope: optional (e.g., api, auth, ui)
+#
+# Body: explain motivation and changes. Use imperative mood. Wrap ~72 cols.
+#
+# Footer: references/issues/notes
+#   Closes #123
+#   BREAKING CHANGE: describe what breaks and migration steps

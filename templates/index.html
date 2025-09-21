@@ -1,0 +1,15 @@
+{% extends "base.html" %}{% block title %}NewsNowIndy — Independent Investigative Journalism{% endblock %}
+{% block content %}
+<div class="card"><div class="hero"><div>
+  <h1>Independent, local, relentless.</h1>
+  <p class="small">NewsNowIndy is a local, independent investigative journalism outlet in Indianapolis. We focus on accountability reporting across criminal justice, crime, and local government—digging into court records, budgets, policing, prosecutions, and public policy so residents can make informed decisions. Our mission is simple: verify the facts, follow the paper trail, and tell the story plainly.</p>
+  <p class="notice small">Got a tip? You can submit 100% anonymous tips at <a href="https://tips.indyleaks.com" target="_blank" rel="noopener">tips.indyleaks.com</a>.</p>
+  <div><a class="btn btn-primary" href="{{ url_for('subscribe') }}">Subscribe by Email</a> <a class="btn btn-success" href="{{ url_for('donate') }}">Donate (Optional)</a></div>
+</div><img src="{{ url_for('static', filename='img/logo.jpg') }}" alt="Newsroom"></div></div>
+<div class="card"><h2>Latest investigations</h2>
+  {% if posts %}<div class="grid grid-3">{% for p in posts %}
+  <div class="card">{% if p.hero_image_url %}<img src="{{ p.hero_image_url }}" alt="" style="width:100%;border-radius:10px;margin-bottom:.6rem;border:1px solid var(--border)">{% endif %}
+  <h3 style="margin:.4rem 0">{{ p.title }}</h3><div class="small">{{ p.created_at.strftime('%b %d, %Y') }}</div>
+  <p class="small">{{ p.summary or '' }}</p><a class="btn" href="{{ url_for('article_detail', slug=p.slug) }}">Read</a></div>
+  {% endfor %}</div>{% else %}<p class="small">No posts yet.</p>{% endif %}
+</div>{% endblock %}

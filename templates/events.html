@@ -1,0 +1,13 @@
+{% extends "base.html" %}{% block title %}Events — City-County Council Calendar{% endblock %}
+{% block content %}<div class="card"><h1>City–County Council — Weekly Calendar</h1>
+<p class="small">Use the controls below or the calendar navigation to view other weeks.</p>
+<div class="grid grid-3"><form method="get">
+<div><label>ISO Week (YYYY-WW)</label><input class="input" name="week" value="{{ '%04d-%02d' % (iso_year, iso_week) }}"></div>
+<div style="align-self:end"><button class="btn">Go</button></div>
+<div style="align-self:end"><a class="btn" href="{{ url_for('events') }}">This Week</a></div>
+</form></div>
+<div style="margin-top:1rem"><iframe src="{{ iframe_url }}" title="City Calendar"></iframe></div>
+{% if parsed and parsed|length %}<div class="card" style="margin-top:1rem"><h2>Upcoming items (parsed)</h2>
+<table class="table"><thead><tr><th>Title</th><th>When</th><th>Link</th></tr></thead><tbody>
+{% for e in parsed %}<tr><td>{{ e.title }}</td><td class="small">{{ e.when_text or '' }}</td><td class="small"><a href="{{ e.link }}" target="_blank" rel="noopener">Open</a></td></tr>{% endfor %}
+</tbody></table></div>{% endif %}</div>{% endblock %}

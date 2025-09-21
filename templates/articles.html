@@ -1,0 +1,5 @@
+{% extends "base.html" %}{% block title %}All Articles — NewsNowIndy{% endblock %}
+{% block content %}<div class="card"><h1>All Articles</h1>
+<table class="table"><thead><tr><th>Title</th><th>Published</th></tr></thead><tbody>
+{% for p in posts %}<tr><td><a href="{{ url_for('article_detail', slug=p.slug) }}">{{ p.title }}</a></td><td class="small">{{ p.created_at.strftime('%b %d, %Y') }}</td></tr>{% endfor %}
+</tbody></table></div>{% endblock %}

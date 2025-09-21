@@ -1,0 +1,16 @@
+{% extends "base.html" %}{% block title %}Admin — Posts{% endblock %}
+{% block content %}<div class="card"><h1>Posts</h1>
+<form method="post">{{ form.csrf_token }}
+<div class="grid grid-2"><div><label>Title</label>{{ form.title(class_="input") }}</div><div><label>Slug</label>{{ form.slug(class_="input") }}</div></div>
+<label>Summary</label>{{ form.summary(class_="input") }}<label>Hero Image URL</label>{{ form.hero_image_url(class_="input") }}
+<label>Content</label>{{ form.content(class_="input", id="editor") }}
+<div class="tiny-note">Use the toolbar to format text, insert links, images, video, and audio.</div>
+<label>{{ form.published() }} Published</label><div style="margin-top:.6rem"><button class="btn btn-primary">Save</button></div></form></div>
+<div class="card"><h2>Existing Posts</h2>
+<table class="table"><thead><tr><th>Title</th><th>Slug</th><th>Created</th><th></th></tr></thead><tbody>
+{% for p in posts %}<tr><td>{{ p.title }}</td><td class="small">{{ p.slug }}</td><td class="small">{{ p.created_at.strftime('%b %d, %Y %H:%M') }}</td>
+<td><form method="post" action="{{ url_for('admin_post_delete', pid=p.id) }}" onsubmit="return confirm('Delete?')"><button class="btn btn-danger">Delete</button></form></td></tr>{% endfor %}
+</tbody></table></div>
+<script src="https://cdn.tiny.cloud/1/no-api-key/tinymce/7/tinymce.min.js" referrerpolicy="origin"></script>
+<script>tinymce.init({selector:'#editor',height:500,skin:'oxide-dark',content_css:'dark',menubar:false,plugins:'link image media lists code table',toolbar:'undo redo | styles | bold italic underline | alignleft aligncenter alignright | bullist numlist | link image media table | code',default_link_target:'_blank',link_assume_external_targets:'https'});</script>
+{% endblock %}
