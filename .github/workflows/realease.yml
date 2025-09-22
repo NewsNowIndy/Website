@@ -16,13 +16,17 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          fetch-tags: true
 
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
           cache: "npm"
 
-      - run: npm ci
+      - run: |
+          git --version
+          git describe --tags --abbrev=0 || true
+          git log -1 --pretty='%H %aI %cI'
 
       - name: Run semantic-release
         env:
