@@ -1,5 +1,17 @@
 {% extends "base.html" %}{% block title %}Admin — Subscribers{% endblock %}
 {% block content %}<div class="card"><h1>Subscribers</h1>
+</div>
+<p class="small">
+<a class="btn" href="{{ url_for('admin_dashboard') }}">Dashboard</a>
+<a class="btn" href="{{ url_for('admin_posts') }}">Posts</a>
+<a class="btn" href="{{ url_for('admin_subscribers') }}">Subscribers</a>
+<a class="btn" href="{{ url_for('admin_broadcast') }}">Broadcast Email</a>
+<a class="btn" href="{{ url_for('admin_donations') }}">Donations</a>
+<a class="btn" href="{{ url_for('admin_messages') }}">Messages</a>
+<a class="btn" href="{{ url_for('admin_news') }}">News</a>
+<a class="btn" href="{{ url_for('admin_logout') }}">Log out</a>
+</p></div>
 <table class="table"><thead><tr><th>Email</th><th>Name</th><th>Since</th></tr></thead><tbody>
 {% for s in subs %}<tr><td>{{ s.email }}</td><td class="small">{{ (s.first_name or '') ~ ' ' ~ (s.last_name or '') }}</td><td class="small">{{ s.created_at.strftime('%b %d, %Y %H:%M') }}</td></tr>{% endfor %}
-</tbody></table></div>{% endblock %}
+</tbody></table></div>
+{% endblock %}

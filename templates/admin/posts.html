@@ -1,16 +1,125 @@
-{% extends "base.html" %}{% block title %}Admin — Posts{% endblock %}
-{% block content %}<div class="card"><h1>Posts</h1>
-<form method="post">{{ form.csrf_token }}
-<div class="grid grid-2"><div><label>Title</label>{{ form.title(class_="input") }}</div><div><label>Slug</label>{{ form.slug(class_="input") }}</div></div>
-<label>Summary</label>{{ form.summary(class_="input") }}<label>Hero Image URL</label>{{ form.hero_image_url(class_="input") }}
-<label>Content</label>{{ form.content(class_="input", id="editor") }}
-<div class="tiny-note">Use the toolbar to format text, insert links, images, video, and audio.</div>
-<label>{{ form.published() }} Published</label><div style="margin-top:.6rem"><button class="btn btn-primary">Save</button></div></form></div>
-<div class="card"><h2>Existing Posts</h2>
-<table class="table"><thead><tr><th>Title</th><th>Slug</th><th>Created</th><th></th></tr></thead><tbody>
-{% for p in posts %}<tr><td>{{ p.title }}</td><td class="small">{{ p.slug }}</td><td class="small">{{ p.created_at.strftime('%b %d, %Y %H:%M') }}</td>
-<td><form method="post" action="{{ url_for('admin_post_delete', pid=p.id) }}" onsubmit="return confirm('Delete?')"><button class="btn btn-danger">Delete</button></form></td></tr>{% endfor %}
-</tbody></table></div>
-<script src="https://cdn.tiny.cloud/1/no-api-key/tinymce/7/tinymce.min.js" referrerpolicy="origin"></script>
-<script>tinymce.init({selector:'#editor',height:500,skin:'oxide-dark',content_css:'dark',menubar:false,plugins:'link image media lists code table',toolbar:'undo redo | styles | bold italic underline | alignleft aligncenter alignright | bullist numlist | link image media table | code',default_link_target:'_blank',link_assume_external_targets:'https'});</script>
+{% extends "base.html" %}
+{% block title %}Admin — Posts{% endblock %}
+{% block content %}
+
+<div class="card">
+  <h1>Posts</h1>
+</div>
+
+<p class="small">
+  <a class="btn" href="{{ url_for('admin_dashboard') }}">Dashboard</a>
+  <a class="btn" href="{{ url_for('admin_posts') }}">Posts</a>
+  <a class="btn" href="{{ url_for('admin_subscribers') }}">Subscribers</a>
+  <a class="btn" href="{{ url_for('admin_broadcast') }}">Broadcast Email</a>
+  <a class="btn" href="{{ url_for('admin_donations') }}">Donations</a>
+  <a class="btn" href="{{ url_for('admin_messages') }}">Messages</a>
+  <a class="btn" href="{{ url_for('admin_news') }}">News</a>
+  <a class="btn" href="{{ url_for('admin_logout') }}">Log out</a>
+</p>
+
+<!-- Existing Posts (NO form here) -->
+<div class="card">
+  <h2>Existing Posts</h2>
+  <table class="table">
+    <thead>
+      <tr><th>Title</th><th>Slug</th><th>Created</th><th></th></tr>
+    </thead>
+    <tbody>
+      {% for p in posts %}
+      <tr>
+        <td>{{ p.title }}</td>
+        <td class="small">{{ p.slug }}</td>
+        <td class="small">{{ p.created_at.strftime('%b %d, %Y %H:%M') }}</td>
+        <td>
+          <a class="btn" href="{{ url_for('admin_post_edit', pid=p.id) }}">Edit</a>
+          <form method="post" action="{{ url_for('admin_post_delete', pid=p.id) }}" style="display:inline" onsubmit="return confirm('Delete?')">
+            <button class="btn btn-danger">Delete</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<!-- Add Post (THIS is the only form for creating) -->
+<div class="card">
+    <h2>Add Post</h2>
+    <form method="post" id="create-post-form" enctype="multipart/form-data">
+      {{ form.csrf_token }}
+  
+      <div class="grid grid-2">
+        <div>
+          <label>Title</label>
+          {{ form.title(class_="input") }}
+        </div>
+        <div>
+          <label>Slug</label>
+          {{ form.slug(class_="input") }}
+        </div>
+      </div>
+  
+      <label>Summary</label>
+      {{ form.summary(class_="input") }}
+  
+      <!-- Choose existing image -->
+      <label>Pick an existing hero image (optional)</label>
+      <select class="input" name="hero_image_choice">
+        <option value="">— None —</option>
+        {% for img in available_images %}
+          <option value="{{ img }}">{{ img }}</option>
+        {% endfor %}
+      </select>
+  
+      <!-- Or upload a new one -->
+      <label>Upload hero image (optional)</label>
+      {{ form.hero_file(class_="input") }}
+  
+      <!-- Or external URL (optional) -->
+      <label>Or external Hero Image URL</label>
+      {{ form.hero_image_url(class_="input") }}
+  
+      <label>Content</label>
+      {{ form.content(class_="input", id="editor") }}
+      <div class="tiny-note">Use the toolbar to format text, insert links, images, video, and audio.</div>
+  
+      <label>{{ form.published() }} Published</label>
+  
+      <div style="margin-top:.6rem">
+        <button class="btn btn-primary" type="submit">Save</button>
+      </div>
+  
+      {% if form.errors %}
+      <div class="card" style="border-color:#ff6b6b">
+        <strong>Couldn’t save — fix the fields below:</strong>
+        <ul class="small">
+          {% for field, errs in form.errors.items() %}
+            {% for e in errs %}<li>{{ field }}: {{ e }}</li>{% endfor %}
+          {% endfor %}
+        </ul>
+      </div>
+      {% endif %}
+    </form>
+  </div>
+
+<!-- TinyMCE (use your API key from env) -->
+<script src="https://cdn.tiny.cloud/1/pymbkgkk2ngfeg388xhhwwqkpa65vaxzk5i7wr1zm4j08v0p/tinymce/8/tinymce.min.js" referrerpolicy="origin" crossorigin="anonymous"></script>
+<script>
+  tinymce.init({
+    selector: '#editor',
+    height: 500,
+    skin: 'oxide-dark',
+    content_css: 'dark',
+    menubar: false,
+    plugins: 'link image media lists code table',
+    toolbar: 'undo redo | styles | bold italic underline | alignleft aligncenter alignright | bullist numlist | link image media table | code',
+    default_link_target: '_blank',
+    link_assume_external_targets: 'https',
+    setup: (editor) => {
+      // Ensure <textarea> stays in sync so WTForms receives content
+      editor.on('change input undo redo', () => editor.save());
+    }
+  });
+  document.getElementById('create-post-form').addEventListener('submit', () => { if (window.tinymce) tinymce.triggerSave(); });
+</script>
 {% endblock %}

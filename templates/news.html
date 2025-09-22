@@ -1,6 +1,8 @@
-{% extends "base.html" %}{% block title %}News — NewsNowIndy{% endblock %}
-{% block content %}<div class="card"><h1>News Feed</h1>
-<p class="small">Auto-imported violent crimes, City-County Council updates, and Marion County Prosecutor news.</p>
-<table class="table"><thead><tr><th>Title</th><th>Source</th><th>Published</th></tr></thead><tbody>
-{% for it in items %}<tr><td><a href="{{ it.link }}" target="_blank" rel="noopener">{{ it.title }}</a></td><td class="small">{{ it.source or "" }}</td><td class="small">{{ it.published_at.strftime('%b %d, %Y %H:%M') if it.published_at else "" }}</td></tr>{% endfor %}
-</tbody></table></div>{% endblock %}
+{% extends "base.html" %}
+{% block title %}News — NewsNowIndy{% endblock %}
+{% block content %}
+<div class="card">
+  <h1>News</h1>
+
+  <rssapp-wall id="_d1kx5CfdZnJEqXr0"></rssapp-wall><script src="https://widget.rss.app/v1/wall.js" type="text/javascript" async></script>
+{% endblock %}

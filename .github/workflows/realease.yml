@@ -1,39 +1,30 @@
-name: Release (semantic version)
+name: semantic-release
 
 on:
   push:
-    branches: [ "main" ]  # change if your default branch differs
+    branches: [ "main" ]
 
 permissions:
-  contents: write   # needed to push tags/CHANGELOG and create releases
+  contents: write
+  issues: write
+  pull-requests: write
 
 jobs:
   release:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
-          fetch-depth: 0  # IMPORTANT: we need full history & tags
+          fetch-depth: 0
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - uses: actions/setup-node@v4
         with:
-          python-version: "3.11"
+          node-version: "20"
+          cache: "npm"
 
-      - name: Install semantic-release
-        run: |
-          python -m pip install --upgrade pip
-          pip install python-semantic-release
+      - run: npm ci
 
-      # This step bumps version, updates CHANGELOG.md, commits, and tags
-      - name: Version & tag
+      - name: Run semantic-release
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: semantic-release version
-
-      # This step creates a GitHub Release with notes
-      - name: Publish GitHub Release
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: semantic-release publish
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npx semantic-release

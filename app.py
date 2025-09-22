@@ -3,6 +3,7 @@ from datetime import datetime, date
 from urllib.parse import urlencode
 from flask import Flask, render_template, request, redirect, url_for, flash, abort, jsonify, session
 from flask_wtf import FlaskForm
+from flask_wtf.file import FileField, FileAllowed
 from wtforms import StringField, TextAreaField, BooleanField, FloatField
 from wtforms.validators import DataRequired, Email, Optional, URL as URLVal, NumberRange
 from models import db, Post, Subscriber, ContactMessage, Donation, NewsItem
@@ -10,16 +11,70 @@ from config import Config
 from utils.signal import send_signal_group
 from utils.email import send_email_smtp
 from utils.scraper import fetch_calendar_week
+from pathlib import Path
+from dotenv import load_dotenv
+from wtforms.validators import ValidationError
+from werkzeug.utils import secure_filename
+import subprocess
 
-__version__ = "1.0.0"
+load_dotenv(dotenv_path=Path(__file__).resolve().parent / ".env")
+
+from pathlib import Path as _P
+__version__ = (_P(__file__).resolve().parent / "VERSION").read_text().strip() \
+    if (_P(__file__).resolve().parent / "VERSION").exists() else "0.0.0"
+
 app = Flask(__name__)
+
+@app.context_processor
+def inject_version():
+    return {"APP_VERSION": __version__}
+
+@app.context_processor
+def inject_keys():
+    return {"TINYMCE_API_KEY": app.config.get("TINYMCE_API_KEY", "")}
+
+@app.context_processor
+def inject_cfg():
+    return {"CFG": app.config}
+
 app.config.from_object(Config)
+app.config.setdefault("HERO_IMAGE_DIR", str(Path(app.static_folder) / "img"))
+Path(app.config["HERO_IMAGE_DIR"]).mkdir(parents=True, exist_ok=True)
 db.init_app(app)
 stripe.api_key = app.config["STRIPE_SECRET_KEY"]
 
 ALLOWED_TAGS = list(bleach.sanitizer.ALLOWED_TAGS) + ["p","img","video","audio","source","figure","figcaption","h1","h2","h3","h4","h5","h6","blockquote","pre","code","hr","br","strong","em","ul","ol","li","a","table","thead","tbody","tr","th","td","span"]
 ALLOWED_ATTRS = {**bleach.sanitizer.ALLOWED_ATTRIBUTES, "img":["src","alt","title","loading"], "a":["href","title","target","rel"], "video":["src","controls","poster"], "audio":["src","controls"], "source":["src","type"], "span":["class"]}
 ALLOWED_PROTOCOLS = ["http","https","mailto","tel"]
+ALLOWED_IMAGE_EXTS = {".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg"}
+
+def list_static_images():
+    base = Path(app.config["HERO_IMAGE_DIR"])
+    imgs = []
+    for p in base.iterdir():
+        if p.is_file() and p.suffix.lower() in ALLOWED_IMAGE_EXTS:
+            imgs.append("/static/img/" + p.name)
+    return sorted(imgs)
+
+def url_or_static(form, field):
+    v = (field.data or "").strip()
+    if not v:
+        return  # Optional is handled separately
+    if v.startswith(("/static/", "static/")):
+        return
+    if v.startswith(("http://", "https://")):
+        return
+    raise ValidationError("Enter a full URL (https://...) or a /static/... path")
+
+def _git_ver():
+    try:
+        v = subprocess.check_output(["git","describe","--tags","--abbrev=0"], stderr=subprocess.DEVNULL).decode().strip()
+        return v[1:] if v.startswith("v") else v
+    except Exception:
+        return None
+
+VER_FILE = Path(__file__).resolve().parent / "VERSION"
+__version__ = VER_FILE.read_text().strip() if VER_FILE.exists() else (_git_ver() or "0.0.0")
 
 class SubscribeForm(FlaskForm):
     email = StringField("Email", validators=[DataRequired(), Email()])
@@ -37,7 +92,9 @@ class PostForm(FlaskForm):
     slug = StringField("Slug", validators=[DataRequired()])
     summary = TextAreaField("Summary", validators=[Optional()])
     content = TextAreaField("Content (HTML)", validators=[DataRequired()])
-    hero_image_url = StringField("Hero image URL", validators=[Optional(), URLVal()])
+    hero_image_url = StringField("Hero image URL", validators=[Optional()])
+    hero_file = FileField("Upload hero image",
+                          validators=[Optional(), FileAllowed(["jpg","jpeg","png","gif","webp","svg"], "Images only")])
     published = BooleanField("Published")
 
 class DonationForm(FlaskForm):
@@ -190,10 +247,87 @@ def admin_posts():
     if not session.get("is_admin"): return abort(403)
     form = PostForm()
     if form.validate_on_submit():
-        db.session.add(Post(title=form.title.data, slug=form.slug.data, summary=form.summary.data or None, content=sanitize_html(form.content.data), hero_image_url=form.hero_image_url.data or None, published=form.published.data))
-        db.session.commit(); flash("Post saved.", "success"); return redirect(url_for("admin_posts"))
+        # 1) If a file was uploaded, save it
+        hero = None
+        if form.hero_file.data:
+            fn = secure_filename(form.hero_file.data.filename or "")
+            ext = os.path.splitext(fn)[1].lower()
+            if not ext or ext not in ALLOWED_IMAGE_EXTS:
+                flash("Invalid image type.", "danger")
+                return redirect(url_for("admin_posts"))
+            dest = Path(app.config["HERO_IMAGE_DIR"]) / f"{int(datetime.utcnow().timestamp())}_{fn}"
+            form.hero_file.data.save(dest)
+            hero = "/static/img/" + dest.name
+
+        # 2) If no file, use selection or typed URL
+        if not hero:
+            # From the <select> (see template) or the typed URL
+            choice = (request.form.get("hero_image_choice") or "").strip()
+            if choice:
+                hero = choice  # already like /static/img/filename.ext
+            else:
+                typed = (form.hero_image_url.data or "").strip()
+                if typed.startswith("static/"):
+                    typed = "/" + typed
+                hero = typed or None
+
+        db.session.add(Post(
+            title=form.title.data,
+            slug=form.slug.data,
+            summary=form.summary.data or None,
+            content=sanitize_html(form.content.data),
+            hero_image_url=hero,
+            published=form.published.data
+        ))
+        db.session.commit()
+        flash("Post saved.", "success")
+        return redirect(url_for("admin_posts"))
+
     posts = Post.query.order_by(Post.created_at.desc()).all()
-    return render_template("admin/posts.html", form=form, posts=posts)
+    return render_template("admin/posts.html", form=form, posts=posts, available_images=list_static_images())
+
+@app.route("/admin/posts/<int:pid>/edit/", methods=["GET", "POST"])
+def admin_post_edit(pid):
+    if not session.get("is_admin"):
+        return abort(403)
+
+    p = Post.query.get_or_404(pid)
+    form = PostForm(obj=p)
+
+    if form.validate_on_submit():
+        # Save new upload if provided
+        hero = p.hero_image_url
+        if form.hero_file.data:
+            fn = secure_filename(form.hero_file.data.filename or "")
+            ext = os.path.splitext(fn)[1].lower()
+            if not ext or ext not in ALLOWED_IMAGE_EXTS:
+                flash("Invalid image type.", "danger")
+                return redirect(url_for("admin_post_edit", pid=p.id))
+            dest = Path(app.config["HERO_IMAGE_DIR"]) / f"{int(datetime.utcnow().timestamp())}_{fn}"
+            form.hero_file.data.save(dest)
+            hero = "/static/img/" + dest.name
+        else:
+            choice = (request.form.get("hero_image_choice") or "").strip()
+            if choice:
+                hero = choice
+            else:
+                typed = (form.hero_image_url.data or "").strip()
+                if typed.startswith("static/"):
+                    typed = "/" + typed
+                hero = typed or None
+
+        p.title = form.title.data
+        p.slug = form.slug.data
+        p.summary = form.summary.data or None
+        p.hero_image_url = hero
+        p.content = sanitize_html(form.content.data)
+        p.published = form.published.data
+
+        db.session.commit()
+        flash("Post updated.", "success")
+        return redirect(url_for("admin_posts"))
+
+    return render_template("admin/edit_post.html", form=form, post=p, available_images=list_static_images())
 
 @app.route("/admin/posts/<int:pid>/delete/", methods=["POST"])
 def admin_post_delete(pid):

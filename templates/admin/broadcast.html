@@ -1,6 +1,18 @@
 {% extends "base.html" %}{% block title %}Admin — Broadcast Email{% endblock %}
 {% block content %}<div class="card"><h1>Broadcast Email</h1>
+</div>
+<p class="small">
+<a class="btn" href="{{ url_for('admin_dashboard') }}">Dashboard</a>
+<a class="btn" href="{{ url_for('admin_posts') }}">Posts</a>
+<a class="btn" href="{{ url_for('admin_subscribers') }}">Subscribers</a>
+<a class="btn" href="{{ url_for('admin_broadcast') }}">Broadcast Email</a>
+<a class="btn" href="{{ url_for('admin_donations') }}">Donations</a>
+<a class="btn" href="{{ url_for('admin_messages') }}">Messages</a>
+<a class="btn" href="{{ url_for('admin_news') }}">News</a>
+<a class="btn" href="{{ url_for('admin_logout') }}">Log out</a>
+</p></div>
 <form method="post"><label>Subject</label><input class="input" name="subject" required>
 <label>HTML Body</label><textarea class="input" name="html" rows="12" required></textarea>
 <div class="tiny-note">Sends to all subscribers (BCC). Uses your SMTP settings.</div>
-<div style="margin-top:.6rem"><button class="btn btn-primary">Send</button></div></form></div>{% endblock %}
+<div style="margin-top:.6rem"><button class="btn btn-primary">Send</button></div></form></div>
+{% endblock %}

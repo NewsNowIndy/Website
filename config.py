@@ -30,3 +30,5 @@ class Config:
 
     TURNSTILE_SITE_KEY = os.getenv("TURNSTILE_SITE_KEY", "")
     TURNSTILE_SECRET = os.getenv("TURNSTILE_SECRET", "")
+
+    TINYMCE_API_KEY = os.getenv("TINYMCE_API_KEY", "")

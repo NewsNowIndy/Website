@@ -1,5 +1,17 @@
 {% extends "base.html" %}{% block title %}Admin — Donations{% endblock %}
 {% block content %}<div class="card"><h1>Donations</h1>
+</div>
+<p class="small">
+<a class="btn" href="{{ url_for('admin_dashboard') }}">Dashboard</a>
+<a class="btn" href="{{ url_for('admin_posts') }}">Posts</a>
+<a class="btn" href="{{ url_for('admin_subscribers') }}">Subscribers</a>
+<a class="btn" href="{{ url_for('admin_broadcast') }}">Broadcast Email</a>
+<a class="btn" href="{{ url_for('admin_donations') }}">Donations</a>
+<a class="btn" href="{{ url_for('admin_messages') }}">Messages</a>
+<a class="btn" href="{{ url_for('admin_news') }}">News</a>
+<a class="btn" href="{{ url_for('admin_logout') }}">Log out</a>
+</p></div>
 <table class="table"><thead><tr><th>Amount</th><th>Name</th><th>Email</th><th>When</th><th>Status</th><th>Ref</th></tr></thead><tbody>
 {% for r in rows %}<tr><td>${{ '%.2f'|format(r.amount/100) }}</td><td class="small">{{ r.donor_name or '' }}</td><td class="small">{{ r.donor_email or '' }}</td><td class="small">{{ r.created_at.strftime('%b %d, %Y %H:%M') }}</td><td class="small">{{ r.status }}</td><td class="small">{{ r.provider_ref or '' }}</td></tr>{% endfor %}
-</tbody></table></div>{% endblock %}
+</tbody></table></div>
+{% endblock %}

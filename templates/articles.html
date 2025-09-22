@@ -1,5 +1,37 @@
-{% extends "base.html" %}{% block title %}All Articles — NewsNowIndy{% endblock %}
-{% block content %}<div class="card"><h1>All Articles</h1>
-<table class="table"><thead><tr><th>Title</th><th>Published</th></tr></thead><tbody>
-{% for p in posts %}<tr><td><a href="{{ url_for('article_detail', slug=p.slug) }}">{{ p.title }}</a></td><td class="small">{{ p.created_at.strftime('%b %d, %Y') }}</td></tr>{% endfor %}
-</tbody></table></div>{% endblock %}
+{% extends "base.html" %}
+{% block title %}
+All Articles — NewsNowIndy
+{% endblock %}
+{% block content %}
+<div class="card">
+    <h1>All Articles</h1>
+    <table class="table">
+        <thead>
+            <tr>
+                <th>Title</th>
+                <th>Published</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for p in posts %}
+            {% set hero = p.hero_image_url %}
+            {% if hero and hero.startswith('static/') %}
+              {% set hero = '/' + hero %}
+            {% endif %}
+            <tr>
+              <td><a href="{{ url_for('article_detail', slug=p.slug) }}">{{ p.title }}</a></td>
+              <td class="small">{{ p.created_at.strftime('%b %d, %Y') }}</td>
+              <td style="text-align:left;">
+                {% if hero %}
+                  <img src="{{ hero }}" alt="{{ p.title }} hero"
+                       style="height:125px; width:auto; border-radius:8px; border:1px solid var(--border); object-fit:cover;">
+                {% else %}
+                  <span class="small" style="opacity:.6">—</span>
+                {% endif %}
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+    </table>
+</div>
+{% endblock %}
