@@ -6,6 +6,7 @@ on:
     # don't run on our own version bumps (we use [skip ci] in the commit msg anyway)
     paths-ignore:
       - 'VERSION'
+  workflow_dispatch: {}
 
 permissions:
   contents: write               # needed to push commits/tags
