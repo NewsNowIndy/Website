@@ -15,7 +15,7 @@ body:
       label: User story
       placeholder: As a <role>, I want <capability> so that <benefit>.
     validations:
-      required: true
+      required: false
   - type: textarea
     id: acceptance
     attributes:
@@ -23,7 +23,7 @@ body:
       description: Bullet list of verifiable outcomes.
       placeholder: "- [ ] …"
     validations:
-      required: true
+      required: false
   - type: input
     id: scope
     attributes:
