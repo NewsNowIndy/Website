@@ -35,6 +35,10 @@
           <form method="post" action="{{ url_for('admin_post_delete', pid=p.id) }}" style="display:inline" onsubmit="return confirm('Delete?')">
             <button class="btn btn-danger">Delete</button>
           </form>
+          <form method="post" action="{{ url_for('admin_post_broadcast', pid=p.id) }}" style="display:inline" onsubmit="return confirm('Email this post to all subscribers?')">
+            {{ broadcast_form.csrf_token }}
+            <button class="btn">Email to subscribers</button>
+          </form>
         </td>
       </tr>
       {% endfor %}

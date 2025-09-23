@@ -14,7 +14,11 @@ class Config:
 
     SIGNAL_CLI_BIN = os.getenv("SIGNAL_CLI_BIN", "signal-cli")
     SIGNAL_SENDER = os.getenv("SIGNAL_SENDER", "")
-    SIGNAL_GROUP = os.getenv("SIGNAL_GROUP", "")
+    SIGNAL_GROUP  = (
+        os.getenv("SIGNAL_GROUP")
+        or os.getenv("GROUP_ID")
+        or os.getenv("SIGNAL_GROUP_ID")
+    )
 
     RSS_JSON = os.getenv("RSS_JSON", "https://rss.app/feeds/v1.1/_d1kx5CfdZnJEqXr0.json")
     RSS_XML = os.getenv("RSS_XML", "https://rss.app/feeds/_d1kx5CfdZnJEqXr0.xml")

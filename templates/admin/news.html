@@ -17,29 +17,42 @@ Admin — News Feed
         <a class="btn" href="{{ url_for('admin_news') }}">News</a>
         <a class="btn" href="{{ url_for('admin_logout') }}">Log out</a>
     </p>
+
+    <form method="post" action="{{ url_for('admin_import_rss') }}">
+        <button class="btn">Import from RSS</button>
+    </form>
 </div>
-<form method="post" action="{{ url_for('admin_import_rss') }}">
-    <button class="btn">Import from RSS</button>
-</form>
-</div>
-<table class="table">
-    <thead>
-        <tr>
-            <th>Title</th>
-            <th>Source</th>
-            <th>Published</th>
-            <th>Link</th>
-        </tr>
-    </thead>
-    <tbody>
-        {% for r in rows %}
-        <tr>
-            <td>{{ r.title }}</td>
-            <td class="small">{{ r.source or '' }}</td>
-            <td class="small">
-                {{ r.published_at.strftime('%b %d, %Y %H:%M') if r.published_at else '' }}</td>
+
+<div class="card">
+    <table class="table">
+        <thead>
+            <tr>
+                <th>Title</th>
+                <th>Source</th>
+                <th>Published</th>
+                <th>Link</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for r in rows %}
+            <tr>
+                <td>{{ r.title }}</td>
+                <td class="small">{{ r.source or '' }}</td>
+                <td class="small">
+                    {{ r.published_at.strftime('%b %d, %Y %H:%M') if r.published_at else '' }}
+                </td>
                 <td class="small">
                     <a href="{{ r.link }}" target="_blank" rel="noopener">Open</a>
+                </td>
+                <td>
+                    <form method="post" 
+                            action="{{ url_for('admin_news_broadcast', nid=r.id) }}" 
+                            style="display:inline"
+                            onsubmit="return confirm('Email this news item to all subscribers?')">
+                        {{ broadcast_form.csrf_token }}
+                        <button class="btn">Email to subscribers</button>
+                    </form>
                 </td>
             </tr>
             {% endfor %}

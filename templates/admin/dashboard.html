@@ -17,4 +17,10 @@
 <div class="card"><strong>{{ stats.donations }}</strong><div class="small">Donations</div></div>
 <div class="card"><strong>{{ stats.messages }}</strong><div class="small">Messages</div></div>
 <div class="card"><strong>{{ stats.news_items }}</strong><div class="small">News Items</div></div>
+<div class="card">
+    <form method="post" action="{{ url_for('admin_test_signal') }}" style="display:inline">
+        {{ csrf_token() if csrf_token else "" }}
+        <button class="btn">Test Signal</button>
+    </form>
+</div>
 {% endblock %}

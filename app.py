@@ -2,6 +2,7 @@ import os, json, re, stripe, bleach, requests
 from datetime import datetime, date
 from urllib.parse import urlencode
 from flask import Flask, render_template, request, redirect, url_for, flash, abort, jsonify, session
+from markupsafe import Markup
 from flask_wtf import FlaskForm
 from flask_wtf.file import FileField, FileAllowed
 from wtforms import StringField, TextAreaField, BooleanField, FloatField
@@ -15,7 +16,15 @@ from pathlib import Path
 from dotenv import load_dotenv
 from wtforms.validators import ValidationError
 from werkzeug.utils import secure_filename
+from itertools import islice
 import subprocess
+import logging, sys
+
+logging.basicConfig(
+    level=logging.INFO,
+    stream=sys.stdout,
+    format="%(asctime)s %(levelname)s %(name)s: %(message)s"
+)
 
 load_dotenv(dotenv_path=Path(__file__).resolve().parent / ".env")
 
@@ -72,6 +81,19 @@ def _git_ver():
         return v[1:] if v.startswith("v") else v
     except Exception:
         return None
+    
+def _chunks(iterable, size):
+    it = iter(iterable)
+    while True:
+        batch = list(islice(it, size))
+        if not batch: break
+        yield batch
+    
+def _mask(v: str | None, keep: int = 4) -> str:
+    if not v: return "(empty)"
+    v = str(v)
+    if len(v) <= keep: return v
+    return v[:keep] + "…" + v[-keep:]
 
 VER_FILE = Path(__file__).resolve().parent / "VERSION"
 __version__ = VER_FILE.read_text().strip() if VER_FILE.exists() else (_git_ver() or "0.0.0")
@@ -101,6 +123,9 @@ class DonationForm(FlaskForm):
     amount = FloatField("Amount (USD)", validators=[DataRequired(), NumberRange(min=1.0)])
     donor_name = StringField("Name", validators=[Optional()])
     donor_email = StringField("Email", validators=[Optional(), Email()])
+
+class EmptyForm(FlaskForm):
+    pass
 
 def sanitize_html(html): return bleach.clean(html or "", tags=ALLOWED_TAGS, attributes=ALLOWED_ATTRS, protocols=ALLOWED_PROTOCOLS, strip=False)
 def require_admin(): 
@@ -132,10 +157,25 @@ def subscribe():
     if form.validate_on_submit():
         email = form.email.data.strip().lower()
         if not Subscriber.query.filter_by(email=email).first():
-            db.session.add(Subscriber(email=email, first_name=form.first_name.data or None, last_name=form.last_name.data or None))
+            db.session.add(Subscriber(
+                email=email,
+                first_name=form.first_name.data or None,
+                last_name=form.last_name.data or None
+            ))
             db.session.commit()
         flash("You're subscribed! We'll email you about new posts and important updates.", "success")
-        send_signal_group(f"New subscriber: {form.first_name.data or ''} {form.last_name.data or ''} <{email}>", app.config["SIGNAL_SENDER"], app.config["SIGNAL_GROUP"], app.config["SIGNAL_CLI_BIN"])
+
+        # Signal notify (with logging)
+        try:
+            rc, out, err = send_signal_group(
+                f"New subscriber: {form.first_name.data or ''} {form.last_name.data or ''} <{email}>",
+                app.config.get("SIGNAL_SENDER"), app.config.get("SIGNAL_GROUP"), app.config.get("SIGNAL_CLI_BIN")
+            )
+            if rc != 0:
+                app.logger.error("Signal subscriber notify failed rc=%s err=%s", rc, err)
+        except Exception:
+            app.logger.exception("Signal notify crashed in /subscribe")
+
         return redirect(url_for("index"))
     return render_template("subscribe.html", form=form)
 
@@ -186,7 +226,29 @@ def contact():
                 ok = requests.post("https://challenges.cloudflare.com/turnstile/v0/siteverify", data={"secret":secret,"response":token}, timeout=10).json().get("success", False)
                 if not ok: is_spam = True
             except Exception: is_spam = True
+
+        msg = ContactMessage(
+            name=form.name.data or None,
+            email=form.email.data,
+            subject=form.subject.data or None,
+            message=form.message.data,
+            is_spam=is_spam
+        )
         db.session.add(ContactMessage(name=form.name.data or None, email=form.email.data, subject=form.subject.data or None, message=form.message.data, is_spam=is_spam)); db.session.commit()
+
+        try:
+            if app.config.get("SIGNAL_SENDER") and app.config.get("SIGNAL_GROUP") and app.config.get("SIGNAL_CLI_BIN"):
+                preview = (msg.message or "").strip().replace("\n", " ")
+                if len(preview) > 140: preview = preview[:137] + "..."
+                rc, out, err = send_signal_group(
+                    f"New contact ({'SPAM?' if is_spam else 'OK'})\nFrom: {msg.name or 'Anonymous'} <{msg.email}>\nSubject: {msg.subject or '(no subject)'}\nPreview: {preview}",
+                    app.config["SIGNAL_SENDER"], app.config["SIGNAL_GROUP"], app.config["SIGNAL_CLI_BIN"]
+                )
+                if rc != 0:
+                    app.logger.error("Signal contact notify failed rc=%s err=%s", rc, err)
+        except Exception:
+            app.logger.exception("Signal notify crashed in /contact")
+
         flash("Thanks for reaching out." + (" (Message flagged for manual review.)" if is_spam else ""), "success"); return redirect(url_for("contact"))
     return render_template("contact.html", form=form, turnstile_site_key=site_key)
 
@@ -284,7 +346,8 @@ def admin_posts():
         return redirect(url_for("admin_posts"))
 
     posts = Post.query.order_by(Post.created_at.desc()).all()
-    return render_template("admin/posts.html", form=form, posts=posts, available_images=list_static_images())
+    broadcast_form = EmptyForm()
+    return render_template("admin/posts.html", form=form, posts=posts, broadcast_form=broadcast_form, available_images=list_static_images())
 
 @app.route("/admin/posts/<int:pid>/edit/", methods=["GET", "POST"])
 def admin_post_edit(pid):
@@ -334,6 +397,118 @@ def admin_post_delete(pid):
     if not session.get("is_admin"): return abort(403)
     p = Post.query.get_or_404(pid); db.session.delete(p); db.session.commit(); flash("Post deleted.", "success"); return redirect(url_for("admin_posts"))
 
+@app.route("/admin/posts/<int:pid>/broadcast/", methods=["POST"])
+def admin_post_broadcast(pid):
+    if not session.get("is_admin"):
+        return abort(403)
+
+    p = Post.query.get_or_404(pid)
+    subs = [s.email for s in Subscriber.query.all()]
+    if not subs:
+        flash("No subscribers to send to.", "warning")
+        return redirect(url_for("admin_posts"))
+
+    # Build absolute URL to the article
+    base = request.url_root.rstrip("/")
+    article_url = base + url_for("article_detail", slug=p.slug)
+
+    hero_html = f'<p><img src="{p.hero_image_url}" alt="" style="max-width:100%;border-radius:10px;border:1px solid #333"></p>' if p.hero_image_url else ""
+    html = f"""
+    <div style="font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;color:#111">
+      <h2 style="margin:0 0 8px 0">{p.title}</h2>
+      <p style="margin:0 0 16px 0;opacity:.8">NewsNowIndy</p>
+      {hero_html}
+      {"<p>"+(p.summary or "")+"</p>" if p.summary else ""}
+      <div>{p.content}</div>
+      <p style="margin-top:16px">
+        <a href="{article_url}" style="display:inline-block;padding:10px 14px;background:#0b5; color:#fff; text-decoration:none; border-radius:8px">Read on the site</a>
+      </p>
+      <hr style="margin:24px 0;border:0;border-top:1px solid #ddd">
+      <p style="font-size:12px;opacity:.7">You’re receiving this because you subscribed to NewsNowIndy alerts.</p>
+    </div>
+    """
+
+    subject = f"New: {p.title} — NewsNowIndy"
+
+    total = 0
+    for batch in _chunks(subs, 100):
+        send_email_smtp(
+            app.config["MAIL_SERVER"], app.config["MAIL_PORT"], app.config["MAIL_USE_TLS"],
+            app.config["MAIL_USERNAME"], app.config["MAIL_PASSWORD"], app.config["MAIL_FROM"],
+            batch, subject, html
+        )
+        total += len(batch)
+
+    # (Optional) Signal ping
+    try:
+        if app.config.get("SIGNAL_SENDER") and app.config.get("SIGNAL_GROUP") and app.config.get("SIGNAL_CLI_BIN"):
+            send_signal_group(
+                f'Broadcasted Post "{p.title}" to {total} subscriber(s).',
+                app.config["SIGNAL_SENDER"], app.config["SIGNAL_GROUP"], app.config["SIGNAL_CLI_BIN"]
+            )
+    except Exception:
+        pass
+
+    flash(f'Sent "{p.title}" to {total} subscriber(s).', "success")
+    return redirect(url_for("admin_posts"))
+
+@app.route("/admin/news/<int:nid>/broadcast/", methods=["POST"])
+def admin_news_broadcast(nid):
+    if not session.get("is_admin"):
+        return abort(403)
+
+    item = NewsItem.query.get_or_404(nid)
+    subs = [s.email for s in Subscriber.query.all()]
+    if not subs:
+        flash("No subscribers to send to.", "warning")
+        return redirect(url_for("admin_news"))
+
+    # Build simple, clean HTML email
+    pub = item.published_at.strftime("%b %d, %Y") if item.published_at else ""
+    source = f" — {item.source}" if item.source else ""
+    article_url = item.link  # external source link
+
+    html = f"""
+    <div style="font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;color:#111;line-height:1.5">
+      <h2 style="margin:0 0 6px 0">{item.title}</h2>
+      <p style="margin:0 0 14px 0;opacity:.8">NewsNowIndy News Feed{source}{(' • ' + pub) if pub else ''}</p>
+      {"<p>"+(item.summary or "").strip()+"</p>" if (item.summary or "").strip() else ""}
+      <p style="margin-top:16px">
+        <a href="{article_url}" target="_blank" rel="noopener"
+           style="display:inline-block;padding:10px 14px;background:#0b5;color:#fff;text-decoration:none;border-radius:8px">
+           Read the article
+        </a>
+      </p>
+      <hr style="margin:24px 0;border:0;border-top:1px solid #ddd">
+      <p style="font-size:12px;opacity:.7;margin:0">You’re receiving this because you subscribed to NewsNowIndy alerts.</p>
+    </div>
+    """
+
+    subject = f"News Feed: {item.title}"
+
+    sent = 0
+    for batch in _chunks(subs, 100):  # send in batches
+        send_email_smtp(
+            app.config["MAIL_SERVER"], app.config["MAIL_PORT"], app.config["MAIL_USE_TLS"],
+            app.config["MAIL_USERNAME"], app.config["MAIL_PASSWORD"], app.config["MAIL_FROM"],
+            batch, subject, html
+        )
+        sent += len(batch)
+
+    # (Optional) Signal notification to your group so you know it went out
+    try:
+        if app.config.get("SIGNAL_SENDER") and app.config.get("SIGNAL_GROUP") and app.config.get("SIGNAL_CLI_BIN"):
+            preview = (item.title or "")[:120]
+            send_signal_group(
+                f"Broadcasted NewsItem to {sent} subscriber(s): {preview}",
+                app.config["SIGNAL_SENDER"], app.config["SIGNAL_GROUP"], app.config["SIGNAL_CLI_BIN"]
+            )
+    except Exception:
+        pass
+
+    flash(f"Sent news item to {sent} subscriber(s).", "success")
+    return redirect(url_for("admin_news"))
+
 @app.route("/admin/donations/")
 def admin_donations():
     if not session.get("is_admin"): return abort(403)
@@ -347,7 +522,9 @@ def admin_messages():
 @app.route("/admin/news/")
 def admin_news():
     if not session.get("is_admin"): return abort(403)
-    rows = NewsItem.query.order_by(NewsItem.published_at.desc().nullslast(), NewsItem.id.desc()).all(); return render_template("admin/news.html", rows=rows)
+    rows = NewsItem.query.order_by(NewsItem.published_at.desc().nullslast(), NewsItem.id.desc()).all()
+    broadcast_form = EmptyForm()
+    return render_template("admin/news.html", rows=rows, broadcast_form=broadcast_form)
 
 @app.route("/admin/import_rss/", methods=["POST","GET"])
 def admin_import_rss():
@@ -367,6 +544,50 @@ def admin_import_rss():
     except Exception as e:
         flash(f"RSS import failed: {e}", "danger")
     return redirect(url_for("admin_news"))
+
+@app.route("/admin/test-signal/", methods=["POST"])
+def admin_test_signal():
+    if not session.get("is_admin"): return abort(403)
+    text = f"Signal test {datetime.utcnow().isoformat()}Z from NewsNowIndy"
+    rc, out, err = send_signal_group(
+        text,
+        app.config.get("SIGNAL_SENDER"),
+        app.config.get("SIGNAL_GROUP"),
+        app.config.get("SIGNAL_CLI_BIN"),
+        config_dir=app.config.get("SIGNAL_CONFIG_DIR")
+    )
+    msg = f"rc={rc}"
+    if err: msg += f" | err: {err[:200]}"
+    if out: msg += f" | out: {out[:200]}"
+    if rc == 0:
+        flash("Signal test message sent. " + msg, "success")
+    else:
+        flash("Signal test failed. " + msg, "danger")
+        app.logger.error("Signal test failed %s", msg)
+    return redirect(url_for("admin_dashboard"))
+
+@app.route("/admin/debug-signal/")
+def admin_debug_signal():
+    if not session.get("is_admin"): return abort(403)
+    sender = app.config.get("SIGNAL_SENDER")
+    group  = app.config.get("SIGNAL_GROUP")
+    cli    = app.config.get("SIGNAL_CLI_BIN")
+    cfg    = app.config.get("SIGNAL_CONFIG_DIR")
+
+    missing = [k for k, val in {
+        "SIGNAL_SENDER": sender,
+        "SIGNAL_GROUP": group,
+        "SIGNAL_CLI_BIN": cli
+    }.items() if not val]
+
+    lines = [
+        f"SIGNAL_SENDER:     {_mask(sender)}",
+        f"SIGNAL_GROUP:      {_mask(group, keep=6)}",
+        f"SIGNAL_CLI_BIN:    {cli or '(empty)'}",
+        f"SIGNAL_CONFIG_DIR: {cfg or '(default)'}",
+        f"MISSING:           {', '.join(missing) if missing else '(none)'}"
+    ]
+    return "<pre>" + "\n".join(lines) + "</pre>"
 
 @app.cli.command("init-db")
 def init_db():
