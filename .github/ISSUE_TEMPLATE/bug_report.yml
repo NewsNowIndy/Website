@@ -1,0 +1,132 @@
+name: "Bug report"
+description: Help us fix a defect
+labels: ["type:bug", "status:triage"]
+body:
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: One-sentence description of the problem.
+      placeholder: Crash when uploading a PDF on the Dashboard page.
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: Numbered steps with the smallest possible repro.
+      placeholder: |
+        1. Go to …
+        2. Click …
+        3. Observe …
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      placeholder: What should have happened?
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+      placeholder: What actually happened (including errors)?
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Screenshots / logs
+      description: Drag images here, paste stack traces, or upload a gist link.
+      placeholder: Attach screenshots or logs.
+
+  - type: input
+    id: repro
+    attributes:
+      label: Minimal reproduction (repo / gist link)
+      placeholder: https://github.com/<you>/<repro> or https://gist.github.com/…
+
+  - type: markdown
+    attributes:
+      value: "### Environment"
+
+  - type: input
+    id: app_version
+    attributes:
+      label: App version / commit
+      placeholder: v1.2.3 or abcd123
+
+  - type: input
+    id: os
+    attributes:
+      label: OS
+      placeholder: macOS 14.6.1 / Ubuntu 22.04 / Windows 11
+
+  - type: input
+    id: browser
+    attributes:
+      label: Browser (if applicable)
+      placeholder: Chrome 140 / Firefox 130 / Safari 18
+
+  - type: input
+    id: runtime
+    attributes:
+      label: Runtime (if applicable)
+      placeholder: Python 3.11.9 / Node 20.17 / Postgres 15
+
+  - type: dropdown
+    id: severity
+    attributes:
+      label: Severity
+      options:
+        - S0 — Blocker (down)
+        - S1 — Critical
+        - S2 — Major
+        - S3 — Minor
+        - S4 — Trivial
+    validations:
+      required: true
+
+  - type: dropdown
+    id: priority
+    attributes:
+      label: Priority
+      options: ["P0", "P1", "P2"]
+    validations:
+      required: true
+
+  - type: input
+    id: area
+    attributes:
+      label: Area / Component (label)
+      placeholder: e.g., area:auth
+
+  - type: textarea
+    id: related
+    attributes:
+      label: Related issues / PRs
+      placeholder: "#123, #456"
+
+  - type: textarea
+    id: notes
+    attributes:
+      label: Additional context
+      placeholder: Anything else we should know?
+
+  - type: checkboxes
+    id: confirmations
+    attributes:
+      label: Confirmations
+      options:
+        - label: I searched existing issues; this isn’t a duplicate.
+          required: true
+        - label: I can reproduce this with a minimal example.
+          required: false
+        - label: I’ve removed secrets from logs and screenshots.
+          required: true
