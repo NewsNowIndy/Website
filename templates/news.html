@@ -1,8 +1,40 @@
 {% extends "base.html" %}
 {% block title %}News — NewsNowIndy{% endblock %}
 {% block content %}
-<div class="card">
-  <h1>News</h1>
+<div class="card p-3">
+  <h1 class="mb-3">News</h1>
 
-  <rssapp-wall id="_d1kx5CfdZnJEqXr0"></rssapp-wall><script src="https://widget.rss.app/v1/wall.js" type="text/javascript" async></script>
+  <div class="row row-cols-1 row-cols-md-2 g-3">
+    {% for it in items %}
+      <div class="col">
+        <div class="card bg-dark border-secondary h-100">
+          {% if it.img %}
+            <a href="{{ it.link }}" target="_blank" rel="noopener">
+              <div style="height:180px; overflow:hidden;" class="rounded-top">
+                <img src="{{ it.img }}" alt="" class="w-100 h-100" style="object-fit:cover;">
+              </div>
+            </a>
+          {% endif %}
+          <div class="card-body">
+            <a href="{{ it.link }}" target="_blank" rel="noopener" class="stretched-link text-decoration-none">
+              <h5 class="card-title text-light mb-1">{{ it.title }}</h5>
+            </a>
+            <div class="small text-muted">
+              {{ it.source }}
+              {% if it.when %}
+                • {{ it.when.strftime('%b %-d, %Y %-I:%M %p') }}
+              {% endif %}
+            </div>
+            {% if it.summary %}
+              <div class="text-muted mt-2">
+                {{ it.summary|safe }}
+              </div>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+    {% endfor %}
+  </div>
+
+</div>
 {% endblock %}

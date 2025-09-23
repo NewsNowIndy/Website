@@ -13,14 +13,21 @@ from utils.signal import send_signal_group
 from utils.email import send_email_smtp
 from utils.scraper import fetch_calendar_week
 from pathlib import Path
+from pathlib import Path as _P
 from dotenv import load_dotenv
 from wtforms.validators import ValidationError
 from werkzeug.utils import secure_filename
 from itertools import islice
 from utils.scraper import fetch_calendar_week
 from utils.calendar_rss import week_events_rss
+from zoneinfo import ZoneInfo
+from dateutil import parser as dtparse
+import feedparser
 import subprocess
 import logging, sys
+import time, urllib.parse
+
+TZ = ZoneInfo("America/Indiana/Indianapolis")
 
 logging.basicConfig(
     level=logging.INFO,
@@ -30,15 +37,17 @@ logging.basicConfig(
 
 load_dotenv(dotenv_path=Path(__file__).resolve().parent / ".env")
 
-from pathlib import Path as _P
-__version__ = (_P(__file__).resolve().parent / "VERSION").read_text().strip() \
-    if (_P(__file__).resolve().parent / "VERSION").exists() else "0.0.0"
+ROOT = _P(__file__).resolve().parent
+_VER_FILE = ROOT / "VERSION"
+_ver_cache = {"t": 0.0, "v": None}
+_ver_state = {
+    "v": None,                # cached version string WITHOUT leading 'v'
+    "src": None,              # "VERSION" or "git" (for your own debugging)
+    "verfile_mtime": 0.0,     # last seen mtime of VERSION file
+    "git_head_rev": "",       # last seen git HEAD commit hash
+}
 
 app = Flask(__name__)
-
-@app.context_processor
-def inject_version():
-    return {"APP_VERSION": __version__}
 
 @app.context_processor
 def inject_keys():
@@ -53,6 +62,10 @@ app.config.setdefault("HERO_IMAGE_DIR", str(Path(app.static_folder) / "img"))
 Path(app.config["HERO_IMAGE_DIR"]).mkdir(parents=True, exist_ok=True)
 db.init_app(app)
 stripe.api_key = app.config["STRIPE_SECRET_KEY"]
+
+FEED_URL = app.config["FEED_URL"]
+
+_cache = {"t": 0, "items": []}
 
 ALLOWED_TAGS = list(bleach.sanitizer.ALLOWED_TAGS) + ["p","img","video","audio","source","figure","figcaption","h1","h2","h3","h4","h5","h6","blockquote","pre","code","hr","br","strong","em","ul","ol","li","a","table","thead","tbody","tr","th","td","span"]
 ALLOWED_ATTRS = {**bleach.sanitizer.ALLOWED_ATTRIBUTES, "img":["src","alt","title","loading"], "a":["href","title","target","rel"], "video":["src","controls","poster"], "audio":["src","controls"], "source":["src","type"], "span":["class"]}
@@ -97,8 +110,158 @@ def _mask(v: str | None, keep: int = 4) -> str:
     if len(v) <= keep: return v
     return v[:keep] + "…" + v[-keep:]
 
-VER_FILE = Path(__file__).resolve().parent / "VERSION"
-__version__ = VER_FILE.read_text().strip() if VER_FILE.exists() else (_git_ver() or "0.0.0")
+def _first_image(entry):
+    # 1) media:content / media:thumbnail
+    media = getattr(entry, "media_content", None) or []
+    if media and isinstance(media, list) and media[0].get("url"):
+        return media[0]["url"]
+    thumbs = getattr(entry, "media_thumbnail", None) or []
+    if thumbs and isinstance(thumbs, list) and thumbs[0].get("url"):
+        return thumbs[0]["url"]
+    # 2) enclosure
+    enc = getattr(entry, "enclosures", None) or []
+    for e in enc:
+        if e.get("type", "").startswith("image/") and e.get("href"):
+            return e["href"]
+    # 3) try to sniff from summary/content (very light)
+    for key in ("summary", "summary_detail", "content"):
+        val = getattr(entry, key, None)
+        html = ""
+        if isinstance(val, list) and val:
+            html = val[0].get("value", "")
+        elif isinstance(val, dict):
+            html = val.get("value", "")
+        elif isinstance(val, str):
+            html = val
+        if html:
+            import re
+            m = re.search(r'<img[^>]+src="([^"]+)"', html, re.I)
+            if m:
+                return m.group(1)
+    return None
+
+def _source(entry):
+    # Try to show a human-readable source (falls back to link domain).
+    if getattr(entry, "source", None) and entry.source.get("title"):
+        return entry.source["title"]
+    try:
+        return urllib.parse.urlparse(entry.link).hostname
+    except Exception:
+        return "Source"
+
+def _fmt_time(entry):
+    # Prefer published, then updated
+    raw = getattr(entry, "published", None) or getattr(entry, "updated", None)
+    if not raw:
+        return None
+    try:
+        dt = dtparse.parse(raw)
+        if not dt.tzinfo:
+            dt = dt.replace(tzinfo=TZ)
+        return dt.astimezone(TZ)
+    except Exception:
+        return None
+
+def get_news_items(ttl=300, limit=40):
+    now = time.time()
+    if now - _cache["t"] > ttl:
+        d = feedparser.parse(FEED_URL)
+        items = []
+        for e in d.entries[:limit]:
+            items.append({
+                "title": e.title,
+                "link": e.link,
+                "img": _first_image(e),
+                "when": _fmt_time(e),            # datetime or None
+                "source": _source(e),
+                "summary": getattr(e, "summary", None),
+            })
+        _cache["items"] = items
+        _cache["t"] = now
+    return _cache["items"]
+
+def _normalize(v: str) -> str:
+    v = (v or "").strip()
+    return v[1:] if v.startswith("v") else v
+
+def _read_version_file():
+    try:
+        mtime = _VER_FILE.stat().st_mtime
+        if mtime != _ver_state["verfile_mtime"]:
+            s = _VER_FILE.read_text().strip()
+            _ver_state["v"] = _normalize(s)
+            _ver_state["src"] = "VERSION"
+            _ver_state["verfile_mtime"] = mtime
+        return True
+    except Exception:
+        return False
+
+def _git_head_hash():
+    try:
+        head_path = ROOT / ".git" / "HEAD"
+        head = head_path.read_text().strip()
+        if head.startswith("ref: "):
+            ref = head.split(" ", 1)[1]  # e.g. refs/heads/main
+            ref_path = ROOT / ".git" / ref
+            return ref_path.read_text().strip()
+        return head  # detached HEAD: contains the hash
+    except Exception:
+        return ""
+
+def _read_git_tag_exact():
+    try:
+        tag = subprocess.check_output(
+            ["git", "describe", "--tags", "--exact-match"],
+            stderr=subprocess.DEVNULL, cwd=str(ROOT), timeout=1.5
+        ).decode().strip()
+        _ver_state["v"] = _normalize(tag)
+        _ver_state["src"] = "git"
+        return True
+    except Exception:
+        return False
+
+def get_app_version(ttl=0):
+    """
+    Returns the version WITHOUT a leading 'v'.
+    Auto-updates when:
+      - VERSION file content/mtime changes, or
+      - .git HEAD commit changes.
+    ttl is kept for signature compatibility; we invalidate by file/HEAD change.
+    """
+    # 1) Prefer VERSION file if present; refresh on mtime change
+    if _VER_FILE.exists():
+        if _read_version_file():
+            return _ver_state["v"]
+
+    # 2) Otherwise, detect git HEAD change and (re)read exact tag if any
+    head = _git_head_hash()
+    if head and head != _ver_state["git_head_rev"]:
+        _ver_state["git_head_rev"] = head
+        if _read_git_tag_exact():
+            return _ver_state["v"]
+
+    # 3) If cached, keep using it
+    if _ver_state["v"]:
+        return _ver_state["v"]
+
+    # 4) Final fallback: short SHA or 0.0.0
+    try:
+        sha = subprocess.check_output(
+            ["git", "rev-parse", "--short", "HEAD"],
+            stderr=subprocess.DEVNULL, cwd=str(ROOT), timeout=1.5
+        ).decode().strip()
+        _ver_state["v"] = sha
+        _ver_state["src"] = "git"
+        return _ver_state["v"]
+    except Exception:
+        _ver_state["v"] = "0.0.0"
+        _ver_state["src"] = "fallback"
+        return _ver_state["v"]
+
+@app.context_processor
+def inject_version():
+    # template expects the 'v' prefix, so we add it there
+    return {"APP_VERSION": get_app_version()}
 
 class SubscribeForm(FlaskForm):
     email = StringField("Email", validators=[DataRequired(), Email()])
@@ -254,19 +417,56 @@ def contact():
         flash("Thanks for reaching out." + (" (Message flagged for manual review.)" if is_spam else ""), "success"); return redirect(url_for("contact"))
     return render_template("contact.html", form=form, turnstile_site_key=site_key)
 
+
 @app.route("/news/")
 def news():
-    items = NewsItem.query.order_by(NewsItem.published_at.desc().nullslast(), NewsItem.id.desc()).limit(100).all()
-    return render_template("news.html", items=items)
+    return render_template("news.html", items=get_news_items())
 
 @app.route("/events/")
 def events():
-    week_param = request.args.get("week",""); today = date.today(); iso_year, iso_week, _ = today.isocalendar()
-    if re.fullmatch(r"\d{4}-\d{2}", week_param or ""): iso_year, iso_week = map(int, week_param.split("-"))
-    iframe_url = "https://calendar.indy.gov/?" + urlencode({"view":"grid","search":"y"})
-    try: parsed = fetch_calendar_week(iso_year, iso_week)
-    except Exception: parsed = []
-    return render_template("events.html", iframe_url=iframe_url, iso_year=iso_year, iso_week=iso_week, parsed=parsed)
+    week_param = request.args.get("week","")
+    today = date.today()
+    iso_year, iso_week, _ = today.isocalendar()
+
+    if re.fullmatch(r"\d{4}-\d{2}", (week_param or "")):
+        iso_year, iso_week = map(int, week_param.split("-"))
+
+    items, start_d, end_d = week_events_rss(iso_year, iso_week)
+
+    # Prev/next week keys
+    start = date.fromisocalendar(iso_year, iso_week, 1)
+    prev_w = (start - timedelta(days=7)).isocalendar()
+    next_w = (start + timedelta(days=7)).isocalendar()
+    prev_week = f"{prev_w[0]}-{prev_w[1]:02d}"
+    next_week = f"{next_w[0]}-{next_w[1]:02d}"
+
+    # Header like "September 21, 2025 – September 27, 2025"
+    if start_d and end_d:
+        pretty_range = f"{start_d.strftime('%B %d, %Y')} – {end_d.strftime('%B %d, %Y')}"
+    else:
+        pretty_range = f"Week {iso_year}-{iso_week:02d}"
+
+    return render_template("events.html",
+        iso_year=iso_year, iso_week=iso_week,
+        items=items, prev_week=prev_week, next_week=next_week,
+        pretty_range=pretty_range
+    )
+
+@app.route("/admin/debug-events")
+def admin_debug_events():
+    if not session.get("is_admin"): return abort(403)
+    url = app.config.get("INDY_CAL_RSS_URL")
+    from utils.calendar_rss import _week_bounds
+    iso_year, iso_week, _ = date.today().isocalendar()
+    items, start_d, end_d = week_events_rss(iso_year, iso_week)
+    return (
+        "<pre>"
+        f"RSS URL: {url or '(empty)'}\n"
+        f"Week: {iso_year}-{iso_week:02d} ({start_d} .. {end_d})\n"
+        f"Items this week: {len(items)}\n"
+        + "\n".join(f"- {i['start']}  {i['title']}" for i in items[:10])
+        + "</pre>"
+    )
 
 @app.route("/foia-laws/")
 def foia_laws(): return render_template("foia.html")

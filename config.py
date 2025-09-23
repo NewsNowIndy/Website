@@ -38,3 +38,13 @@ class Config:
     TINYMCE_API_KEY = os.getenv("TINYMCE_API_KEY", "")
 
     INDY_CAL_RSS_URL = os.getenv("INDY_CAL_RSS_URL")
+
+    FEED_URL = os.getenv("FEED_URL") or (
+        "https://rss-bridge.org/bridge01/?action=display&bridge=FeedMergeBridge"
+        "&feed_name=Crime+News"
+        "&feed_1=https%3A%2F%2Fwww.wthr.com%2Ffeeds%2Fsyndication%2Frss%2Fnews%2Fcrime"
+        "&feed_2=https%3A%2F%2Ffox59.com%2Fnews%2Findycrime%2Ffeed%2F"
+        "&feed_3=https%3A%2F%2Fwww.wrtv.com%2Fnews%2Flocal-news%2Fcrime.rss"
+        "&feed_4=https%3A%2Findypolitics.org%2Ffeed%2F"
+        "&format=Atom"
+    )

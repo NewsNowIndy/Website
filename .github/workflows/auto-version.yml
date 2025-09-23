@@ -1,0 +1,100 @@
+name: Auto bump version on push
+
+on:
+  push:
+    branches: [ main ]          # ← change if your default branch is different
+    # don't run on our own version bumps (we use [skip ci] in the commit msg anyway)
+    paths-ignore:
+      - 'VERSION'
+
+permissions:
+  contents: write               # needed to push commits/tags
+
+jobs:
+  bump:
+    if: "!contains(github.event.head_commit.message, '[skip ci]')"  # avoid loops
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0        # we need tags and history
+
+      - name: Set git identity
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Find last tag (if any)
+        id: lasttag
+        run: |
+          if git describe --tags --abbrev=0 >/dev/null 2>&1; then
+            echo "tag=$(git describe --tags --abbrev=0)" >> $GITHUB_OUTPUT
+          else
+            echo "tag=" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Determine bump type (major/minor/patch)
+        id: bump
+        run: |
+          # Default bump type
+          BUMP=patch
+
+          # Get commit messages since last tag (or all, if none)
+          if [ -n "${{ steps.lasttag.outputs.tag }}" ]; then
+            RANGE="${{ steps.lasttag.outputs.tag }}..HEAD"
+          else
+            RANGE=""
+          fi
+
+          MSGS=$(git log --pretty=%s $RANGE)
+
+          # Conventional commits detection
+          echo "$MSGS" | grep -Ei 'BREAKING CHANGE|!: ' >/dev/null && BUMP=major || true
+          if [ "$BUMP" = "patch" ]; then
+            echo "$MSGS" | grep -E '^feat(\(|:)' >/dev/null && BUMP=minor || true
+          fi
+
+          echo "type=$BUMP" >> $GITHUB_OUTPUT
+
+      - name: Compute next version
+        id: nextver
+        run: |
+          # Current version preference: VERSION file (X.Y.Z); else exact git tag (strip 'v'); else 0.0.0
+          if [ -f VERSION ]; then
+            CUR=$(cat VERSION | tr -d '\n')
+          elif git describe --tags --exact-match >/dev/null 2>&1; then
+            CUR=$(git describe --tags --exact-match | sed -E 's/^v//')
+          else
+            CUR=0.0.0
+          fi
+
+          IFS='.' read -r MA MI PA <<EOF
+          ${CUR:-0.0.0}
+          EOF
+          MA=${MA:-0}; MI=${MI:-0}; PA=${PA:-0}
+
+          case "${{ steps.bump.outputs.type }}" in
+            major) MA=$((MA+1)); MI=0; PA=0 ;;
+            minor) MI=$((MI+1)); PA=0 ;;
+            patch) PA=$((PA+1)) ;;
+          esac
+
+          NEXT="${MA}.${MI}.${PA}"
+          echo "next=$NEXT" >> $GITHUB_OUTPUT
+          echo "Next version: $NEXT"
+
+      - name: Update VERSION, commit with [skip ci], tag, push
+        env:
+          NEXT: ${{ steps.nextver.outputs.next }}
+        run: |
+          echo "$NEXT" > VERSION
+          git add VERSION
+          git commit -m "[skip ci] chore: release v$NEXT" || echo "No changes to commit"
+          # Create/replace tag
+          if git rev-parse "v$NEXT" >/dev/null 2>&1; then
+            git tag -d "v$NEXT"
+          fi
+          git tag -a "v$NEXT" -m "v$NEXT"
+          git push --follow-tags
