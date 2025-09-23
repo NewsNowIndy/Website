@@ -98,3 +98,13 @@ jobs:
           fi
           git tag -a "v$NEXT" -m "v$NEXT"
           git push --follow-tags
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.nextver.outputs.next }}
+          name: v${{ steps.nextver.outputs.next }}
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
