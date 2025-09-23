@@ -36,3 +36,5 @@ class Config:
     TURNSTILE_SECRET = os.getenv("TURNSTILE_SECRET", "")
 
     TINYMCE_API_KEY = os.getenv("TINYMCE_API_KEY", "")
+
+    INDY_CAL_RSS_URL = os.getenv("INDY_CAL_RSS_URL")

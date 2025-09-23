@@ -1,5 +1,5 @@
 import os, json, re, stripe, bleach, requests
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 from urllib.parse import urlencode
 from flask import Flask, render_template, request, redirect, url_for, flash, abort, jsonify, session
 from markupsafe import Markup
@@ -17,6 +17,8 @@ from dotenv import load_dotenv
 from wtforms.validators import ValidationError
 from werkzeug.utils import secure_filename
 from itertools import islice
+from utils.scraper import fetch_calendar_week
+from utils.calendar_rss import week_events_rss
 import subprocess
 import logging, sys
 
