@@ -20,6 +20,7 @@ from werkzeug.utils import secure_filename
 from itertools import islice
 from utils.scraper import fetch_calendar_week
 from utils.calendar_rss import week_events_rss
+from utils.rss_merge import fetch_combined
 from zoneinfo import ZoneInfo
 from dateutil import parser as dtparse
 import feedparser
@@ -62,8 +63,6 @@ app.config.setdefault("HERO_IMAGE_DIR", str(Path(app.static_folder) / "img"))
 Path(app.config["HERO_IMAGE_DIR"]).mkdir(parents=True, exist_ok=True)
 db.init_app(app)
 stripe.api_key = app.config["STRIPE_SECRET_KEY"]
-
-FEED_URL = app.config["FEED_URL"]
 
 _cache = {"t": 0, "items": []}
 
@@ -162,23 +161,80 @@ def _fmt_time(entry):
     except Exception:
         return None
 
-def get_news_items(ttl=300, limit=40):
+def _rss_urls():
+    raw = app.config.get("RSS_FEEDS") or os.getenv("RSS_FEEDS") or ""
+    return [u.strip() for u in raw.split(",") if u.strip()]
+
+_multi_cache = {}  # {cache_key: {"t": epoch, "items": [...]}}
+def _get_cache(key, ttl=300):
     now = time.time()
-    if now - _cache["t"] > ttl:
-        d = feedparser.parse(FEED_URL)
-        items = []
-        for e in d.entries[:limit]:
-            items.append({
-                "title": e.title,
-                "link": e.link,
-                "img": _first_image(e),
-                "when": _fmt_time(e),            # datetime or None
-                "source": _source(e),
-                "summary": getattr(e, "summary", None),
-            })
-        _cache["items"] = items
-        _cache["t"] = now
-    return _cache["items"]
+    ent = _multi_cache.get(key)
+    if ent and (now - ent["t"] < ttl):
+        return ent["items"]
+    return None
+def _set_cache(key, items):
+    _multi_cache[key] = {"t": time.time(), "items": items}
+
+def fetch_single_feed(url, limit=30, ttl=300):
+    if not url:
+        return []
+    cache_key = f"single::{url}::{limit}"
+    cached = _get_cache(cache_key, ttl)
+    if cached is not None:
+        return cached
+
+    d = feedparser.parse(url)
+    out = []
+    for e in d.entries[:limit]:
+        out.append({
+            "title": e.title,
+            "link": e.link,
+            "img": _first_image(e),
+            "when": _fmt_time(e),
+            "source": _source(e),
+            "summary": _excerpt(getattr(e, "summary", None), max_chars=280),  # ← trim here
+        })
+    # sort newest first if we have dates
+    out.sort(key=lambda x: x["when"] or datetime.min.replace(tzinfo=TZ), reverse=True)
+    _set_cache(cache_key, out)
+    return out
+
+def fetch_multi_feeds(urls, per_feed_limit=20, total_limit=40, ttl=300):
+    if not urls:
+        return []
+    cache_key = f"multi::{','.join(urls)}::{per_feed_limit}::{total_limit}"
+    cached = _get_cache(cache_key, ttl)
+    if cached is not None:
+        return cached
+
+    items = []
+    seen_links = set()
+    for u in urls:
+        try:
+            d = feedparser.parse(u)
+            for e in d.entries[:per_feed_limit]:
+                ...
+                items.append({
+                    "title": e.title,
+                    "link": e.link,
+                    "img": _first_image(e),
+                    "when": _fmt_time(e),
+                    "source": _source(e),
+                    "summary": _excerpt(getattr(e, "summary", None), max_chars=280),  # ← trim here
+                })
+        except Exception:
+            continue
+
+    items.sort(key=lambda x: x["when"] or datetime.min.replace(tzinfo=TZ), reverse=True)
+    items = items[:total_limit]
+    _set_cache(cache_key, items)
+    return items
+
+def get_news_items(ttl=600, limit=40):
+    urls = _rss_urls()
+    if not urls:
+        return []
+    return fetch_combined(urls, limit=limit, ttl=ttl)
 
 def _normalize(v: str) -> str:
     v = (v or "").strip()
@@ -257,6 +313,21 @@ def get_app_version(ttl=0):
         _ver_state["v"] = "0.0.0"
         _ver_state["src"] = "fallback"
         return _ver_state["v"]
+    
+def _excerpt(html: str | None, max_chars: int = 280) -> str | None:
+    if not html:
+        return None
+    # strip all tags -> plain text
+    txt = bleach.clean(html, tags=[], attributes={}, protocols=[], strip=True)
+    # collapse whitespace
+    txt = re.sub(r"\s+", " ", txt).strip()
+    # cap length with a word-boundary ellipsis
+    if len(txt) > max_chars:
+        cut = txt[:max_chars].rstrip()
+        # try not to cut mid-word
+        cut = cut.rsplit(" ", 1)[0] if " " in cut else cut
+        txt = cut + "…"
+    return txt or None
 
 @app.context_processor
 def inject_version():
@@ -417,10 +488,42 @@ def contact():
         flash("Thanks for reaching out." + (" (Message flagged for manual review.)" if is_spam else ""), "success"); return redirect(url_for("contact"))
     return render_template("contact.html", form=form, turnstile_site_key=site_key)
 
-
 @app.route("/news/")
 def news():
-    return render_template("news.html", items=get_news_items())
+    # Crime (multi if provided, else single)
+    crime_urls = app.config.get("CRIME_FEED_URLS") or []
+    if crime_urls:
+        crime = fetch_multi_feeds(crime_urls, per_feed_limit=20, total_limit=40, ttl=300)
+    else:
+        crime = fetch_single_feed(app.config.get("CRIME_FEED_URL"), limit=30, ttl=300)
+
+    # News (already multiple)
+    mixed_urls = app.config.get("NEWS_FEED_URLS") or []
+    mixed = fetch_multi_feeds(mixed_urls, per_feed_limit=20, total_limit=40, ttl=300)
+
+    return render_template("news.html", crime_items=crime, mixed_items=mixed)
+
+@app.route("/admin/debug-news")
+def admin_debug_news():
+    if not session.get("is_admin"): return abort(403)
+
+    crime_url = app.config.get("CRIME_FEED_URL") or app.config.get("FEED_URL")
+    raw = os.getenv("RSS_FEEDS", "")
+    mixed_urls = app.config.get("NEWS_FEED_URLS") or [u.strip() for u in raw.split(",") if u.strip()]
+
+    crime = fetch_single_feed(crime_url, limit=10, ttl=0) if crime_url else []
+    mixed = fetch_multi_feeds(mixed_urls, per_feed_limit=10, total_limit=20, ttl=0) if mixed_urls else []
+
+    return (
+        "<pre>"
+        f"CRIME_FEED_URL: {crime_url or '(empty)'}\n"
+        f"NEWS_FEED_URLS: {mixed_urls or '(empty)'}\n"
+        f"Crime items: {len(crime)}\n"
+        + "\n".join(f"  - {i['when']} | {i['title'][:80]}" for i in crime[:5])
+        + "\n\nMixed items: {0}\n".format(len(mixed))
+        + "\n".join(f"  - {i['when']} | {i['source']} | {i['title'][:80]}" for i in mixed[:10])
+        + "</pre>"
+    )
 
 @app.route("/events/")
 def events():
@@ -732,17 +835,30 @@ def admin_news():
 def admin_import_rss():
     if not session.get("is_admin"): return abort(403)
     try:
-        resp = requests.get(app.config["RSS_JSON"], timeout=10); data = resp.json(); imported = 0
-        for item in data.get("items", []):
-            title = (item.get("title") or "").strip(); link = item.get("url") or item.get("link")
-            if not title or not link: continue
-            if NewsItem.query.filter_by(link=link).first(): continue
-            published_at = None; dt = item.get("publishedDate") or item.get("pubDate")
-            if dt:
-                try: published_at = datetime.fromisoformat(dt.replace("Z","+00:00"))
-                except Exception: published_at = None
-            db.session.add(NewsItem(title=title[:300], link=link[:500], source=item.get("source","")[:200] if item.get("source") else None, summary=item.get("description") or None, published_at=published_at)); imported += 1
-        db.session.commit(); flash(f"RSS import complete. {imported} new items.", "success")
+        urls = _rss_urls()
+        if not urls:
+            flash("No RSS_FEEDS configured.", "warning")
+            return redirect(url_for("admin_news"))
+
+        merged = fetch_combined(urls, limit=500, ttl=0)  # bypass cache for import
+        imported = 0
+        for it in merged:
+            title = (it.get("title") or "").strip()
+            link  = (it.get("link") or "").strip()
+            if not title or not link: 
+                continue
+            if NewsItem.query.filter_by(link=link).first():
+                continue
+            db.session.add(NewsItem(
+                title=title[:300],
+                link=link[:500],
+                source=(it.get("source") or "")[:200] or None,
+                summary=it.get("summary") or None,
+                published_at=it.get("when")
+            ))
+            imported += 1
+        db.session.commit()
+        flash(f"RSS import complete. {imported} new items.", "success")
     except Exception as e:
         flash(f"RSS import failed: {e}", "danger")
     return redirect(url_for("admin_news"))

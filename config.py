@@ -1,5 +1,9 @@
 import os
 
+
+def _split_urls(val: str | None):
+    return [u.strip() for u in (val or "").split(",") if u.strip()]
+
 class Config:
     SECRET_KEY = os.getenv("SECRET_KEY", "change-me-in-prod")
     SQLALCHEMY_DATABASE_URI = os.getenv("DATABASE_URL", "sqlite:///newsnowindy.db")
@@ -48,3 +52,7 @@ class Config:
         "&feed_4=https%3A%2Findypolitics.org%2Ffeed%2F"
         "&format=Atom"
     )
+
+    CRIME_FEED_URL = os.getenv("CRIME_FEED_URL", "")
+    NEWS_FEED_URLS  = _split_urls(os.getenv("NEWS_FEED_URLS"))
+    CRIME_FEED_URLS = _split_urls(os.getenv("CRIME_FEED_URLS"))
