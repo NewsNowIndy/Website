@@ -371,6 +371,11 @@ class DonationForm(FlaskForm):
 class EmptyForm(FlaskForm):
     pass
 
+class EmailOneForm(FlaskForm):
+    subject = StringField("Subject", validators=[DataRequired()])
+    html = TextAreaField("HTML body", validators=[DataRequired()])
+
+
 def sanitize_html(html): return bleach.clean(html or "", tags=ALLOWED_TAGS, attributes=ALLOWED_ATTRS, protocols=ALLOWED_PROTOCOLS, strip=False)
 def require_admin(): 
     if not session.get("is_admin"): abort(403)
@@ -630,6 +635,27 @@ def admin_dashboard():
 def admin_subscribers():
     if not session.get("is_admin"): return abort(403)
     subs = Subscriber.query.order_by(Subscriber.created_at.desc()).all(); return render_template("admin/subscribers.html", subs=subs)
+
+@app.route("/admin/subscribers/<int:sid>/email/", methods=["GET", "POST"])
+def admin_email_subscriber(sid):
+    if not session.get("is_admin"):
+        return abort(403)
+
+    sub = Subscriber.query.get_or_404(sid)
+    form = EmailOneForm()
+
+    if form.validate_on_submit():
+        # send to just this one subscriber
+        send_email_smtp(
+            app.config["MAIL_SERVER"], app.config["MAIL_PORT"], app.config["MAIL_USE_TLS"],
+            app.config["MAIL_USERNAME"], app.config["MAIL_PASSWORD"], app.config["MAIL_FROM"],
+            [sub.email], form.subject.data.strip(), form.html.data
+        )
+        flash(f"Email sent to {sub.email}.", "success")
+        return redirect(url_for("admin_subscribers"))
+
+    return render_template("admin/email_one.html", form=form, sub=sub)
+
 
 @app.route("/admin/broadcast/", methods=["GET","POST"])
 def admin_broadcast():
