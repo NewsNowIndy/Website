@@ -8,7 +8,6 @@ from flask_wtf.file import FileField, FileAllowed
 from wtforms import StringField, TextAreaField, BooleanField, FloatField
 from wtforms.validators import DataRequired, Email, Optional, URL as URLVal, NumberRange
 from models import db, Post, Subscriber, ContactMessage, Donation, NewsItem
-from config import Config
 from utils.signal import send_signal_group
 from utils.email import send_email_smtp
 from utils.scraper import fetch_calendar_week
@@ -17,16 +16,20 @@ from pathlib import Path as _P
 from dotenv import load_dotenv
 from wtforms.validators import ValidationError
 from werkzeug.utils import secure_filename
+from werkzeug.middleware.proxy_fix import ProxyFix
 from itertools import islice
 from utils.scraper import fetch_calendar_week
 from utils.calendar_rss import week_events_rss
 from utils.rss_merge import fetch_combined
+from admin.views import admin_bp
 from zoneinfo import ZoneInfo
 from dateutil import parser as dtparse
+from functools import wraps
 import feedparser
 import subprocess
 import logging, sys
 import time, urllib.parse
+import secrets
 
 TZ = ZoneInfo("America/Indiana/Indianapolis")
 
@@ -37,6 +40,8 @@ logging.basicConfig(
 )
 
 load_dotenv(dotenv_path=Path(__file__).resolve().parent / ".env")
+
+from config import Config
 
 ROOT = _P(__file__).resolve().parent
 _VER_FILE = ROOT / "VERSION"
@@ -174,6 +179,9 @@ def _get_cache(key, ttl=300):
     return None
 def _set_cache(key, items):
     _multi_cache[key] = {"t": time.time(), "items": items}
+
+def _admin_pw():
+    return (app.config.get("ADMIN_PASSWORD") or os.getenv("ADMIN_PASSWORD") or "").strip()
 
 def fetch_single_feed(url, limit=30, ttl=300):
     if not url:
@@ -366,6 +374,28 @@ class EmptyForm(FlaskForm):
 def sanitize_html(html): return bleach.clean(html or "", tags=ALLOWED_TAGS, attributes=ALLOWED_ATTRS, protocols=ALLOWED_PROTOCOLS, strip=False)
 def require_admin(): 
     if not session.get("is_admin"): abort(403)
+
+# Optional: decorator if you need to protect any non-/admin route later
+def login_required(f):
+    @wraps(f)
+    def wrapper(*args, **kwargs):
+        if not session.get("is_admin"):
+            return redirect(url_for("admin_login", next=request.url))
+        return f(*args, **kwargs)
+    return wrapper
+
+# Global guard for all /admin paths except the login/logout itself.
+@app.before_request
+def protect_admin_area():
+    p = request.path.rstrip("/")
+    if p.startswith("/admin"):
+        # allow login page and static files under /static
+        allowed = {"/admin/login", "/admin/logout"}
+        if p in allowed or p.startswith("/static/"):
+            return
+        if not session.get("is_admin"):
+            # carry 'next' so we can bounce back after login
+            return redirect(url_for("admin_login", next=request.url))
 
 @app.route("/")
 def index():
@@ -577,14 +607,18 @@ def foia_laws(): return render_template("foia.html")
 @app.route("/admin/login/", methods=["GET","POST"])
 def admin_login():
     if request.method == "POST":
-        pw = request.form.get("password","")
-        if pw and app.config["ADMIN_PASSWORD"] and pw == app.config["ADMIN_PASSWORD"]:
-            session["is_admin"]=True; return redirect(url_for("admin_dashboard"))
+        pw = (request.form.get("password","") or "").strip()
+        if _admin_pw() and secrets.compare_digest(pw, _admin_pw()):
+            session["is_admin"] = True
+            return redirect(request.args.get("next") or url_for("admin_dashboard"))
         flash("Invalid password.", "danger")
     return render_template("admin/login.html")
 
 @app.route("/admin/logout/")
-def admin_logout(): session.clear(); flash("Logged out.", "success"); return redirect(url_for("index"))
+def admin_logout():
+    session.clear()
+    flash("Logged out.", "success")
+    return redirect(url_for("admin_login"))
 
 @app.route("/admin/")
 def admin_dashboard():

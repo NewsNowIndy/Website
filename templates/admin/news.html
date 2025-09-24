@@ -1,4 +1,4 @@
-{% extends "base.html" %}
+{% extends "admin/admin_base.html" %}
 {% block title %}
 Admin — News Feed
 {% endblock %}
@@ -7,16 +7,6 @@ Admin — News Feed
     <div class="header-bar">
         <h1>News Feed Items</h1>
     </div>
-    <p class="small">
-        <a class="btn" href="{{ url_for('admin_dashboard') }}">Dashboard</a>
-        <a class="btn" href="{{ url_for('admin_posts') }}">Posts</a>
-        <a class="btn" href="{{ url_for('admin_subscribers') }}">Subscribers</a>
-        <a class="btn" href="{{ url_for('admin_broadcast') }}">Broadcast Email</a>
-        <a class="btn" href="{{ url_for('admin_donations') }}">Donations</a>
-        <a class="btn" href="{{ url_for('admin_messages') }}">Messages</a>
-        <a class="btn" href="{{ url_for('admin_news') }}">News</a>
-        <a class="btn" href="{{ url_for('admin_logout') }}">Log out</a>
-    </p>
 
     <form method="post" action="{{ url_for('admin_import_rss') }}">
         <button class="btn">Import from RSS</button>

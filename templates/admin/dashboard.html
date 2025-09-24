@@ -1,18 +1,14 @@
-{% extends "base.html" %}{% block title %}Admin — Dashboard{% endblock %}
-{% block content %}<div class="card"><h1>Admin Dashboard</h1>
+{% extends "admin/admin_base.html" %}
+{% block title %}
+Admin — Dashboard
+{% endblock %}
+
+{% block content %}
+<div class="card">
+    <h1>Admin Dashboard</h1>
 </div>
-<p class="small">
-<a class="btn" href="{{ url_for('admin_dashboard') }}">Dashboard</a>
-<a class="btn" href="{{ url_for('admin_posts') }}">Posts</a>
-<a class="btn" href="{{ url_for('admin_subscribers') }}">Subscribers</a>
-<a class="btn" href="{{ url_for('admin_broadcast') }}">Broadcast Email</a>
-<a class="btn" href="{{ url_for('admin_donations') }}">Donations</a>
-<a class="btn" href="{{ url_for('admin_messages') }}">Messages</a>
-<a class="btn" href="{{ url_for('admin_news') }}">News</a>
-<a class="btn" href="{{ url_for('admin_logout') }}">Log out</a>
-</p></div>
-<div class="grid grid-3">
-<div class="card"><strong>{{ stats.posts }}</strong><div class="small">Posts</div></div>
+
+<div class="grid grid-3"><div class="card"><strong>{{ stats.posts }}</strong><div class="small">Posts</div></div>
 <div class="card"><strong>{{ stats.subscribers }}</strong><div class="small">Subscribers</div></div>
 <div class="card"><strong>{{ stats.donations }}</strong><div class="small">Donations</div></div>
 <div class="card"><strong>{{ stats.messages }}</strong><div class="small">Messages</div></div>
