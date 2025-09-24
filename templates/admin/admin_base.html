@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <title>{% block title %}NewsNowIndy - Admin Dash{% endblock %}</title>
+        <link rel="stylesheet" href="{{ url_for('static', filename='main.css') }}">
+    </head>
+    
+    <body>
+        <div class="navbar">
+            <div class="container header-bar">
+                <div><strong>NewsNowIndy</strong>
+                </div>
+                <div class="top-links small">
+                    <a class="btn" href="{{ url_for('admin_dashboard') }}">Dashboard</a>
+                    <a class="btn" href="{{ url_for('admin_posts') }}">Posts</a>
+                    <a class="btn" href="{{ url_for('admin_subscribers') }}">Subscribers</a>
+                    <a class="btn" href="{{ url_for('admin_broadcast') }}">Broadcast Email</a>
+                    <a class="btn" href="{{ url_for('admin_donations') }}">Donations</a>
+                    <a class="btn" href="{{ url_for('admin_messages') }}">Messages</a>
+                    <a class="btn" href="{{ url_for('admin_news') }}">News</a>
+                    <a class="btn" href="{{ url_for('admin_logout') }}">Log out</a>
+                </div>
+            </div>
+        </div>
+        
+        <main class="container">
+            {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}{% for cat, msg in messages %}
+            <div class="card">{{ msg }}</div>
+            {% endfor %}{% endif %}{% endwith %}
+            {% block content %}{% endblock %}
+        </main>
+        
+        <footer>
+            <div class="container">© NewsNowIndy • Independent Investigative Journalism • v{{ APP_VERSION }}</div>
+        </footer>
+    </body>
+</html>
+    
