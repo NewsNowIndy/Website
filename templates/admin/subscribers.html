@@ -1,7 +1,32 @@
-{% extends "admin/admin_base.html" %}{% block title %}Admin — Subscribers{% endblock %}
-{% block content %}<div class="card"><h1>Subscribers</h1>
+{% extends "admin/admin_base.html" %}
+{% block title %}Admin — Subscribers{% endblock %}
+{% block content %}
 
-<table class="table"><thead><tr><th>Email</th><th>Name</th><th>Since</th></tr></thead><tbody>
-{% for s in subs %}<tr><td>{{ s.email }}</td><td class="small">{{ (s.first_name or '') ~ ' ' ~ (s.last_name or '') }}</td><td class="small">{{ s.created_at.strftime('%b %d, %Y %H:%M') }}</td></tr>{% endfor %}
-</tbody></table></div>
+<div class="card">
+    <h1>Subscribers</h1>
+    <table class="table">
+        <thead>
+            <tr>
+                <th>Email</th>
+                <th>Name</th>
+                <th>Since</th>
+                <th>Action</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for s in subs %}
+            <tr>
+                <td>{{ s.email }}</td>
+                <td class="small">{{ (s.first_name or '') ~ ' ' ~ (s.last_name or '') }}</td>
+                <td class="small">{{ s.created_at.strftime('%b %d, %Y %H:%M') }}</td>
+                <td>
+                    <a class="btn" href="{{ url_for('admin_email_subscriber', sid=s.id) }}">E-Mail</a>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
 {% endblock %}
+
+class="btn"

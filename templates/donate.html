@@ -1,8 +1,35 @@
-{% extends "base.html" %}{% block title %}Donate — NewsNowIndy{% endblock %}
-{% block content %}<div class="card"><h1>Donate (optional)</h1>
-<p class="small">Donations are never required, but they help us keep reporting. Give any amount you wish.</p>
-<form method="post" action="{{ url_for('donate_checkout') }}">{{ form.csrf_token }}
-<label>Amount (USD)</label>{{ form.amount(class_="input", step="0.01", min="1") }}
-<div class="grid grid-2"><div><label>Name (optional)</label>{{ form.donor_name(class_="input") }}</div><div><label>Email (optional)</label>{{ form.donor_email(class_="input") }}</div></div>
-<div style="margin-top:.6rem"><button class="btn btn-success">Donate via Stripe</button></div></form>
-<p class="tiny-note" style="margin-top:.6rem">You’ll be redirected to Stripe Checkout. We’ll record the donation after a confirmed webhook.</p></div>{% endblock %}
+{% extends "base.html" %}
+{% block title %}Donate — NewsNowIndy{% endblock %}
+{% block content %}
+
+<div class="card">
+    <h1>Donate (optional)</h1>
+    <p class="medium"><strong>Donations are never required, but they help us keep reporting. Give any amount you wish.</strong></p>
+    <p class="small">We are currently working on utilizing Stripe for donations, but until then you can reach out to us if you wish to donate! info@newsnowindy.com</p>
+</div>
+
+<!-- DISABLED UNTIL STRIPE COMPLETED
+<div class="card">
+    <h1>Donate (optional)</h1>
+    <p class="small">Donations are never required, but they help us keep reporting. Give any amount you wish.</p>
+    <form method="post" action="{{ url_for('donate_checkout') }}">{{ form.csrf_token }}
+        <label>Amount (USD)</label>
+        {{ form.amount(class_="input", step="0.01", min="1") }}
+        <div class="grid grid-2">
+            <div>
+                <label>Name (optional)</label>
+                {{ form.donor_name(class_="input") }}
+            </div>
+            <div>
+                <label>Email (optional)</label>
+                {{ form.donor_email(class_="input") }}
+            </div>
+        </div>
+        <div style="margin-top:.6rem">
+            <button class="btn btn-success">Donate via Stripe</button>
+        </div>
+    </form>
+    <p class="tiny-note" style="margin-top:.6rem">You’ll be redirected to Stripe Checkout.</p>
+</div>
+{% endblock %}
+-->

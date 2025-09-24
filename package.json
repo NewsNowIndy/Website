@@ -25,5 +25,11 @@
     "bugs": {
         "url": "https://github.com/NewsNowIndy/Website/issues"
     },
-    "homepage": "https://github.com/NewsNowIndy/Website#readme"
+    "homepage": "https://github.com/NewsNowIndy/Website#readme",
+    "release": {
+    "branches": [
+      "main",
+      { "name": "dev", "prerelease": true }
+    ]
+  }
 }
