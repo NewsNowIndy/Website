@@ -67,6 +67,9 @@ app.config.from_object(Config)
 app.config.setdefault("HERO_IMAGE_DIR", str(Path(app.static_folder) / "img"))
 Path(app.config["HERO_IMAGE_DIR"]).mkdir(parents=True, exist_ok=True)
 db.init_app(app)
+with app.app_context():
+    db.create_all()
+
 stripe.api_key = app.config["STRIPE_SECRET_KEY"]
 
 _cache = {"t": 0, "items": []}
