@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}Email Subscriber — Admin{% endblock %}
+{% block content %}
+<div class="card p-3">
+  <h1 class="mb-3">Email Subscriber</h1>
+  <p class="text-muted mb-3">
+    To: <strong>{{ sub.first_name or '' }} {{ sub.last_name or '' }}</strong>
+    &lt;{{ sub.email }}&gt;
+  </p>
+  <form method="post">
+    {{ form.hidden_tag() }}
+    <div class="mb-3">
+      <label class="form-label">Subject</label>
+      {{ form.subject(class="form-control", placeholder="Subject") }}
+    </div>
+    <div class="mb-3">
+      <label class="form-label">HTML Body</label>
+      {{ form.html(class="form-control", rows="12",
+                   placeholder="<p>Your message…</p>") }}
+      <div class="form-text">HTML is supported. Keep it simple for deliverability.</div>
+    </div>
+    <div class="d-flex gap-2">
+      <button type="submit" class="btn btn-success">Send</button>
+      <a href="{{ url_for('admin_subscribers') }}" class="btn btn-secondary">Cancel</a>
+    </div>
+  </form>
+</div>
+{% endblock %}
