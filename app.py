@@ -65,6 +65,7 @@ def inject_cfg():
 
 app.config.from_object(Config)
 app.config.setdefault("HERO_IMAGE_DIR", str(Path(app.static_folder) / "img"))
+app.logger.info("DB URL driver: %s", (app.config["SQLALCHEMY_DATABASE_URI"].split("://",1)[0]))
 Path(app.config["HERO_IMAGE_DIR"]).mkdir(parents=True, exist_ok=True)
 db.init_app(app)
 with app.app_context():

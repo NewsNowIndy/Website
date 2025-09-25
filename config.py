@@ -1,4 +1,5 @@
 import os
+from datetime import timedelta
 
 
 def _split_urls(val: str | None):
@@ -56,3 +57,18 @@ class Config:
     CRIME_FEED_URL = os.getenv("CRIME_FEED_URL", "")
     NEWS_FEED_URLS  = _split_urls(os.getenv("NEWS_FEED_URLS"))
     CRIME_FEED_URLS = _split_urls(os.getenv("CRIME_FEED_URLS"))
+
+    SQLALCHEMY_DATABASE_URI = os.getenv(
+        "DATABASE_URL",
+        # local fallback (keeps dev working if env not set)
+        "sqlite:///foia.db"
+    )
+    SQLALCHEMY_TRACK_MODIFICATIONS = False
+
+    # small pool + pre-ping helps with serverless/idle connections
+    SQLALCHEMY_ENGINE_OPTIONS = {
+        "pool_pre_ping": True,
+        "pool_recycle": 300,
+        "pool_size": 5,
+        "max_overflow": 5,
+    }
