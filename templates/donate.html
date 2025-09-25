@@ -2,34 +2,92 @@
 {% block title %}Donate — NewsNowIndy{% endblock %}
 {% block content %}
 
-<div class="card">
-    <h1>Donate (optional)</h1>
-    <p class="medium"><strong>Donations are never required, but they help us keep reporting. Give any amount you wish.</strong></p>
-    <p class="small">We are currently working on utilizing Stripe for donations, but until then you can reach out to us if you wish to donate! info@newsnowindy.com</p>
-</div>
-
-<!-- DISABLED UNTIL STRIPE COMPLETED
-<div class="card">
-    <h1>Donate (optional)</h1>
-    <p class="small">Donations are never required, but they help us keep reporting. Give any amount you wish.</p>
-    <form method="post" action="{{ url_for('donate_checkout') }}">{{ form.csrf_token }}
-        <label>Amount (USD)</label>
-        {{ form.amount(class_="input", step="0.01", min="1") }}
-        <div class="grid grid-2">
-            <div>
-                <label>Name (optional)</label>
-                {{ form.donor_name(class_="input") }}
-            </div>
-            <div>
-                <label>Email (optional)</label>
-                {{ form.donor_email(class_="input") }}
-            </div>
-        </div>
-        <div style="margin-top:.6rem">
-            <button class="btn btn-success">Donate via Stripe</button>
-        </div>
-    </form>
-    <p class="tiny-note" style="margin-top:.6rem">You’ll be redirected to Stripe Checkout.</p>
-</div>
+<head>
+    <meta charset="utf-8" />
+    <title>Donate — NewsNowIndy</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <!-- Your site CSS (optional) -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='main.css') }}" />
+    <!-- PayPal SDK: pass your client id from config -->
+    <script src="https://www.paypal.com/sdk/js?client-id={{ CFG.PAYPAL_CLIENT_ID }}&currency=USD" defer></script>
+  </head>
+  <body class="bg-dark text-light">
+    <main class="container" style="max-width: 640px; padding: 2rem 1rem;">
+      <h1 class="h3" style="margin-bottom: 1rem;">Support NewsNowIndy</h1>
+      <p style="opacity:.85; margin-bottom: 1rem;">
+        Enter an amount and donate securely with PayPal.
+      </p>
+  
+      <!-- Simple amount field -->
+      <label for="donation-amount" class="form-label" style="display:block; margin-bottom:.5rem;">Amount (USD)</label>
+      <input
+        id="donation-amount"
+        type="number"
+        min="1"
+        step="1"
+        value="10"
+        inputmode="numeric"
+        class="form-control"
+        style="width: 220px; padding:.6rem .75rem; border-radius:.5rem; border:1px solid #333; background:#111; color:#fff; margin-bottom: 1rem;"
+        aria-describedby="amountHelp"
+      />
+      <div id="amountHelp" style="font-size:.9rem; opacity:.7; margin-bottom:1rem;">
+        You can change this to any whole-dollar amount.
+      </div>
+  
+      <!-- PayPal button container -->
+      <div id="paypal-button-container" style="margin-top: .5rem;"></div>
+  
+      <!-- Optional: small note -->
+      <p style="font-size:.85rem; opacity:.7; margin-top:1rem;">
+        Your donation keeps our independent reporting going. Thank you!
+      </p>
+    </main>
+  
+    <script>
+      document.addEventListener("DOMContentLoaded", () => {
+        const amountInput = document.getElementById("donation-amount");
+  
+        // Render the PayPal button once SDK has loaded
+        if (window.paypal) {
+          paypal.Buttons({
+            style: { shape: "rect", layout: "vertical" },
+  
+            // Create the order on your server
+            createOrder: async () => {
+              const amount = (amountInput.value || "10").trim();
+              const res = await fetch("/paypal/create-order", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ amount, currency: "USD" })
+              });
+              const data = await res.json();
+              return data.id; // orderID
+            },
+  
+            // Capture the order on your server
+            onApprove: async (data) => {
+              const res = await fetch("/paypal/capture-order", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ orderID: data.orderID })
+              });
+              const j = await res.json();
+              if (j && j.ok) {
+                window.location.href = "/donate/success";
+              } else {
+                window.location.href = "/donate/cancel";
+              }
+            },
+  
+            onError: (err) => {
+              console.error("PayPal error:", err);
+              window.location.href = "/donate/cancel";
+            }
+          }).render("#paypal-button-container");
+        }
+      });
+    </script>
+  </body>
+  </html>
 {% endblock %}
--->
