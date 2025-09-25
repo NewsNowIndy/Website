@@ -1,22 +1,83 @@
 {% extends "admin/admin_base.html" %}
-{% block title %}
-Admin — Dashboard
-{% endblock %}
+{% block title %}Admin — Dashboard{% endblock %}
 
 {% block content %}
-<div class="card">
+  <div class="card">
     <h1>Admin Dashboard</h1>
-</div>
+  </div>
 
-<div class="grid grid-3"><div class="card"><strong>{{ stats.posts }}</strong><div class="small">Posts</div></div>
-<div class="card"><strong>{{ stats.subscribers }}</strong><div class="small">Subscribers</div></div>
-<div class="card"><strong>{{ stats.donations }}</strong><div class="small">Donations</div></div>
-<div class="card"><strong>{{ stats.messages }}</strong><div class="small">Messages</div></div>
-<div class="card"><strong>{{ stats.news_items }}</strong><div class="small">News Items</div></div>
-<div class="card">
-    <form method="post" action="{{ url_for('admin_test_signal') }}" style="display:inline">
+  <!-- Row 1: KPI cards -->
+  <section class="dashboard-section">
+    <div class="dashboard-grid">
+      <a class="card stat-card" href="{{ url_for('admin_posts') }}" aria-label="Posts">
+        <div class="kpi">{{ stats.posts }}</div>
+        <div class="label">Posts</div>
+      </a>
+
+      <a class="card stat-card" href="{{ url_for('admin_subscribers') }}" aria-label="Subscribers">
+        <div class="kpi">{{ stats.subscribers }}</div>
+        <div class="label">Subscribers</div>
+      </a>
+
+      <a class="card stat-card" href="{{ url_for('admin_donations') }}" aria-label="Donations">
+        <div class="kpi">{{ stats.donations }}</div>
+        <div class="label">Donations</div>
+      </a>
+
+      <a class="card stat-card" href="{{ url_for('admin_messages') }}" aria-label="Messages">
+        <div class="kpi">{{ stats.messages }}</div>
+        <div class="label">Messages</div>
+      </a>
+
+      <a class="card stat-card" href="{{ url_for('admin_news') }}" aria-label="News Items">
+        <div class="kpi">{{ stats.news_items }}</div>
+        <div class="label">News Items</div>
+      </a>
+    </div>
+  </section>
+
+  <!-- Row 2: Centered Test Signal card (dark) -->
+  <section class="dashboard-section">
+    <div class="center-row">
+      <form method="post" action="{{ url_for('admin_test_signal') }}"
+            class="card stat-card stat-card--dark"
+            id="test-signal-card">
         {{ csrf_token() if csrf_token else "" }}
-        <button class="btn">Test Signal</button>
-    </form>
-</div>
+        <div class="kpi">↗︎</div>
+        <div class="label">Test Signal</div>
+        <button class="visually-hidden" type="submit">Test Signal</button>
+      </form>
+    </div>
+  </section>
+
+  <!-- Row 3: Centered Quick actions -->
+  <section class="dashboard-section">
+    <div class="center-row">
+      <div class="card">
+        <div class="row-actions center-actions">
+          <a class="btn" href="{{ url_for('admin_posts') }}">New Post</a>
+          <a class="btn" href="{{ url_for('admin_broadcast') }}">Broadcast Email</a>
+          <a class="btn" href="{{ url_for('admin_news') }}">Import News</a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <script>
+    // Submit the Test Signal form when the whole card is clicked or via keyboard
+    (function () {
+      const form = document.getElementById('test-signal-card');
+      if (!form) return;
+      form.addEventListener('click', function (e) {
+        if (e.target.tagName.toLowerCase() !== 'button') form.submit();
+      });
+      form.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); form.submit(); }
+      });
+      form.tabIndex = 0;
+      form.setAttribute('role', 'button');
+      form.setAttribute('aria-pressed', 'false');
+    })();
+  </script>
 {% endblock %}
+

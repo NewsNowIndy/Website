@@ -1,7 +1,7 @@
 import os, json, re, stripe, bleach, requests
 from datetime import datetime, date, timedelta
 from urllib.parse import urlencode
-from flask import Flask, render_template, request, redirect, url_for, flash, abort, jsonify, session
+from flask import Flask, render_template, request, redirect, url_for, flash, abort, jsonify, session, send_from_directory
 from markupsafe import Markup
 from flask_wtf import FlaskForm
 from flask_wtf.file import FileField, FileAllowed
@@ -405,6 +405,10 @@ def protect_admin_area():
         if not session.get("is_admin"):
             # carry 'next' so we can bounce back after login
             return redirect(url_for("admin_login", next=request.url))
+        
+@app.route('/favicon.ico')
+def favicon_file():
+    return send_from_directory(app.static_folder, 'favicon.ico')
 
 @app.route("/")
 def index():
