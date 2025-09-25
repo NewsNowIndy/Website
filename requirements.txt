@@ -13,9 +13,8 @@ python-dateutil>=2.8,<3
 
 gunicorn>=21,<22
 
-python-dateutil>=2.8,<3
-
 beautifulsoup4>=4.12
 lxml
 
-email-validator>=2.0.0
+sqlalchemy-cockroachdb>=2.0
+psycopg[binary]>=3.1
