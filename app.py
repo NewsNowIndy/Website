@@ -1,9 +1,9 @@
 import os, json, re, stripe, bleach, requests
 from datetime import datetime, date, timedelta
-from urllib.parse import urlencode, urljoin
+from urllib.parse import urlencode
 from flask import Flask, render_template, request, redirect, url_for, flash, abort, jsonify, session, send_from_directory
 from markupsafe import Markup
-from flask_wtf import FlaskForm, CSRFProtect
+from flask_wtf import FlaskForm
 from flask_wtf.file import FileField, FileAllowed
 from wtforms import StringField, TextAreaField, BooleanField, FloatField
 from wtforms.validators import DataRequired, Email, Optional, URL as URLVal, NumberRange
@@ -25,13 +25,11 @@ from admin.views import admin_bp
 from zoneinfo import ZoneInfo
 from dateutil import parser as dtparse
 from functools import wraps
-from decimal import Decimal, ROUND_HALF_UP
 import feedparser
 import subprocess
 import logging, sys
 import time, urllib.parse
 import secrets
-import base64
 
 TZ = ZoneInfo("America/Indiana/Indianapolis")
 
@@ -55,11 +53,7 @@ _ver_state = {
     "git_head_rev": "",       # last seen git HEAD commit hash
 }
 
-csrf = CSRFProtect()
-
 app = Flask(__name__)
-
-csrf.init_app(app)
 
 @app.context_processor
 def inject_keys():
@@ -69,7 +63,6 @@ def inject_keys():
 def inject_cfg():
     return {"CFG": app.config}
 
-app.config["PAYPAL_CLIENT_ID"] = os.getenv("PAYPAL_CLIENT_ID", "")
 app.config.from_object(Config)
 app.config.setdefault("HERO_IMAGE_DIR", str(Path(app.static_folder) / "img"))
 app.logger.info("DB URL driver: %s", (app.config["SQLALCHEMY_DATABASE_URI"].split("://",1)[0]))
@@ -86,141 +79,6 @@ ALLOWED_TAGS = list(bleach.sanitizer.ALLOWED_TAGS) + ["p","img","video","audio",
 ALLOWED_ATTRS = {**bleach.sanitizer.ALLOWED_ATTRIBUTES, "img":["src","alt","title","loading"], "a":["href","title","target","rel"], "video":["src","controls","poster"], "audio":["src","controls"], "source":["src","type"], "span":["class"]}
 ALLOWED_PROTOCOLS = ["http","https","mailto","tel"]
 ALLOWED_IMAGE_EXTS = {".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg"}
-
-PAYPAL_ENV = os.getenv("PAYPAL_ENV", "sandbox").lower()
-PAYPAL_BASE = "https://api-m.sandbox.paypal.com" if PAYPAL_ENV != "live" else "https://api-m.paypal.com"
-
-def _pp_auth_header():
-    cid = os.getenv("PAYPAL_CLIENT_ID")
-    sec = os.getenv("PAYPAL_SECRET")
-    token = base64.b64encode(f"{cid}:{sec}".encode()).decode()
-    return {"Authorization": f"Basic {token}", "Content-Type": "application/x-www-form-urlencoded"}
-
-def _pp_access_token():
-    r = requests.post(f"{PAYPAL_BASE}/v1/oauth2/token", data={"grant_type": "client_credentials"},
-                      headers=_pp_auth_header(), timeout=15)
-    r.raise_for_status()
-    return r.json()["access_token"]
-
-def _pp_headers_bearer():
-    return {"Content-Type": "application/json", "Authorization": f"Bearer {_pp_access_token()}"}
-
-@app.post("/paypal/create-order")
-@csrf.exempt
-def paypal_create_order():
-    data = request.get_json(force=True)
-    amount = str(data.get("amount") or "10.00")  # default $10
-    currency = (data.get("currency") or "USD").upper()
-
-    body = {
-        "intent": "CAPTURE",
-        "purchase_units": [{
-            "amount": {"currency_code": currency, "value": amount},
-            "description": "NewsNowIndy Donation"
-        }],
-        # return/cancel URLs are not used with server-side capture-from-JS flow,
-        # but can be kept for fallback flows:
-        "application_context": {
-            "brand_name": "NewsNowIndy",
-            "shipping_preference": "NO_SHIPPING",
-            "user_action": "PAY_NOW"
-        }
-    }
-    r = requests.post(f"{PAYPAL_BASE}/v2/checkout/orders", json=body, headers=_pp_headers_bearer(), timeout=20)
-    r.raise_for_status()
-    order = r.json()
-    return jsonify({"id": order["id"]})
-
-@app.post("/paypal/capture-order")
-@csrf.exempt
-def paypal_capture_order():
-    data = request.get_json(force=True)
-    order_id = data["orderID"]
-
-    r = requests.post(
-        f"{PAYPAL_BASE}/v2/checkout/orders/{order_id}/capture",
-        headers=_pp_headers_bearer(),
-        timeout=20,
-    )
-    r.raise_for_status()
-    cap = r.json()
-
-    status = (cap.get("status") or "").upper()
-
-    # --- FIX: define `captures` before using it ---
-    pu = (cap.get("purchase_units") or [{}])[0]
-    payments = (pu.get("payments") or {})
-    captures = (payments.get("captures") or [])  # <— now defined
-    amount_value = captures[0]["amount"]["value"] if captures else "0.00"
-
-    # Convert to cents safely
-    try:
-        amount_cents = int(
-            (Decimal(amount_value).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)) * 100
-        )
-    except Exception:
-        amount_cents = 0
-
-    # Optional payer details if present
-    payer = cap.get("payer") or {}
-    donor_name = " ".join(filter(None, [
-        (payer.get("name") or {}).get("given_name"),
-        (payer.get("name") or {}).get("surname"),
-    ])) or None
-    donor_email = payer.get("email_address") or None
-
-    # Store donation
-    db.session.add(Donation(
-        amount=amount_cents,
-        donor_name=donor_name,
-        donor_email=donor_email,
-        provider="paypal",
-        provider_ref=order_id,
-        status=status.lower() if status else "unknown",
-    ))
-    db.session.commit()
-
-    # Send alert
-    _send_donation_alert(
-        amount_cents=amount_cents,
-        provider="paypal",
-        provider_ref=order_id,
-        donor_name=donor_name,
-        donor_email=donor_email,
-    )
-
-    return jsonify({"ok": True, "status": status})
-
-def _send_donation_alert(amount_cents: int, provider: str, provider_ref: str | None = None,
-                         donor_name: str | None = None, donor_email: str | None = None):
-    """Send a donation alert email to the newsroom addresses (SMS-friendly)."""
-    try:
-        amount_str = f"${(amount_cents or 0)/100:.2f}"
-        subj = f"New Donation: {amount_str} via {provider.title()}"
-        to_list = ["info@newsnowindy.com", "info@indyleaks.com"]
-
-        # Plain-text body (SMS/MMS friendly — no HTML, ASCII only, short lines)
-        plain = (
-            f"New Donation: ${(amount_cents or 0)/100:.2f} via {provider.title()}\n"
-            f"Ref: {provider_ref or '-'}\n"
-            f"Donor: {donor_name or '-'}\n"
-            f"Email: {donor_email or '-'}\n"
-        )
-
-        send_email_smtp(
-            app.config["MAIL_SERVER"],
-            app.config["MAIL_PORT"],
-            app.config["MAIL_USE_TLS"],
-            app.config["MAIL_USERNAME"],
-            app.config["MAIL_PASSWORD"],
-            app.config["MAIL_FROM"],
-            ["info@newsnowindy.com", "info@indyleaks.com"],
-            f"New Donation: ${(amount_cents or 0)/100:.2f} via {provider.title()}",
-            plain,                         # we can pass the same string; param name remains "html" for compat
-            content_type="plain"           # ← forces text/plain; SMS gateways won’t complain
-        )
-    except Exception:
-        app.logger.exception("Failed to send donation alert email")
 
 def list_static_images():
     base = Path(app.config["HERO_IMAGE_DIR"])
@@ -635,13 +493,6 @@ def stripe_webhook():
         donor_email = data.get("metadata",{}).get("donor_email") or None
         db.session.add(Donation(amount=amount_total, donor_name=donor_name, donor_email=donor_email, provider="stripe", provider_ref=data.get("id"), status="succeeded"))
         db.session.commit()
-        _send_donation_alert(
-            amount_cents=amount_total,
-            provider="stripe",
-            provider_ref=data.get("id"),
-            donor_name=donor_name,
-            donor_email=donor_email,
-        )
     return ("", 200)
 
 @app.route("/contact/", methods=["GET","POST"])
